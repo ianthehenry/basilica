@@ -19,7 +19,11 @@ executable basilica
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       bytestring,
+                       transformers,
+                       uuid,
+                       websockets,
+                       base >=4.7 && <4.8
                      , scotty
                      , wai
                      , warp

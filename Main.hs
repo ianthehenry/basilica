@@ -1,18 +1,20 @@
 module Main where
 
-import BasePrelude hiding (app)
-import Web.Scotty
-import Network.Wai (Application)
-import qualified Network.Wai.Handler.Warp as Warp
-import Data.Text (Text)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Control.Concurrent.MVar
-import Data.Map (Map)
-import qualified Data.Map as Map
+import           BasePrelude hiding (app)
+import           Control.Concurrent.MVar
+import           Control.Monad.Trans (liftIO)
+import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
-import Data.Aeson ((.=))
-import Control.Monad.Trans (liftIO)
-import Network.HTTP.Types
+import           Data.Map (Map)
+import qualified Data.Map as Map
+import           Data.Text (Text)
+import           Data.Time.Clock (UTCTime, getCurrentTime)
+import           Network.HTTP.Types
+import           Network.Wai (Application)
+import qualified Network.Wai.Handler.Warp as Warp
+import qualified Sockets
+import           Utils
+import           Web.Scotty
 
 type User = Text
 type ID = Int
@@ -98,15 +100,13 @@ app database nextID = scottyApp $ do
     withThread f threadID =
       maybe thread404 f =<< Map.lookup threadID <$> db
     thread404 = status status404 >> text "Thread not found"
-      
-twice :: a -> (a, a)
-twice a = (a, a)
 
 main :: IO ()
 main = do
   let port = 3000
   database <- newMVar Map.empty
   idGen <- newMVar 0
-  let generateID = modifyMVar idGen (return . twice . (+ 1))
+  let generateID = modifyMVar idGen (return . dup . (+ 1))
+  forkIO Sockets.runServer
   putStrLn $ "Running on port " ++ show port
   Warp.run port =<< app database generateID
