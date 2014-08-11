@@ -7,6 +7,7 @@ module Sockets (
 import           BasePrelude
 import           Control.Concurrent.MVar
 import           Control.Monad.IO.Class (liftIO)
+import qualified Data.Aeson as Aeson
 import           Data.ByteString.Lazy (ByteString)
 import           Data.Map (Map, (!))
 import qualified Data.Map as Map
@@ -17,9 +18,9 @@ import           Data.UUID (UUID)
 import           Data.UUID.V4 (nextRandom)
 import qualified Network.HTTP.Types.URI as URI
 import qualified Network.WebSockets as WS
-  
-type Path = String
-type Broadcaster = Path -> ByteString -> IO ()
+import           Types
+
+type Broadcaster = Thread -> IO ()
 data Client = Client { clientPath :: Path
                      , clientIdentifier :: UUID
                      , clientConnection :: WS.Connection
@@ -33,7 +34,7 @@ instance Ord Client where
   (<=) = (<=) `on` clientIdentifier
 
 newServerState :: ServerState
-newServerState = Map.fromList $ (, Set.empty) <$> ["one", "two"]
+newServerState = Map.fromList [([], Set.empty)]
 
 addClient :: Client -> ServerState -> ServerState
 addClient client@(Client {clientPath}) = Map.adjust (Set.insert client) clientPath
@@ -50,8 +51,8 @@ newServer = do
   state <- newMVar newServerState
   return (makeBroadcast state, application state)
   where
-    makeBroadcast db path msg =
-      readMVar db >>= broadcast path msg
+    makeBroadcast db thread =
+      readMVar db >>= broadcast [] (Aeson.encode thread)
 
 send :: Client -> Text -> IO ()
 send = WS.sendTextData . clientConnection
@@ -63,19 +64,19 @@ ifAccept pending callback =
       -- todo: use Applicative?
       conn <- WS.acceptRequest pending
       uuid <- nextRandom
-      callback Client { clientPath = "one"
+      callback Client { clientPath = []
                       , clientConnection = conn
                       , clientIdentifier = uuid
                       }
     _ -> WS.rejectRequest pending "You can only connect to / right now."
 
 application :: MVar ServerState -> WS.ServerApp
-application state pending = 
+application state pending =
   ifAccept pending $ \client -> do
     send client "hello, friend"
     flip finally (disconnect client >> putStrLn "disconnected") $ do
       modifyMVar_ state (return . addClient client)
-      readMVar state >>= broadcast "one" "new client!"
+      readMVar state >>= broadcast [] "new client!"
       talk state client
     where
       disconnect client = modifyMVar_ state (return . removeClient client)

@@ -1,117 +1,40 @@
 module Main where
 
 import           BasePrelude hiding (app)
-import           Control.Concurrent.MVar
 import           Control.Monad.Trans (liftIO)
-import           Data.Aeson ((.=))
-import qualified Data.Aeson as Aeson
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import           Data.Text (Text)
-import           Data.Time.Clock (UTCTime, getCurrentTime)
+import           Database
 import           Network.HTTP.Types
 import           Network.Wai (Application)
 import qualified Network.Wai.Handler.Warp as Warp
 import           Network.Wai.Handler.WebSockets (websocketsOr)
 import           Network.WebSockets.Connection (defaultConnectionOptions)
 import qualified Sockets
-import           Utils
 import           Web.Scotty
 
-type User = Text
-type ID = Int
-
-data Thread = Thread { threadID :: ID
-                     , threadTitle :: Text
-                     , threadMessages :: [Message]
-                     , threadCreator :: User
-                     , threadTimeStamp :: UTCTime
-                     }
-type Forum = Map ID Thread
-data Message = Message { messageID :: ID
-                       , messageCreator :: User
-                       , messageText :: Text
-                       , messageThreadID :: ID
-                       , messageTimeStamp :: UTCTime
-                       }
-
-instance Aeson.ToJSON Message where
-  toJSON Message {..} = Aeson.object [ "id" .= messageID
-                                     , "creator" .= messageCreator
-                                     , "text" .= messageText
-                                     , "timeStamp" .= messageTimeStamp
-                                     ]
-
-instance Aeson.ToJSON Thread where
-  toJSON Thread {..} = Aeson.object [ "id" .= threadID
-                                    , "title" .= threadTitle
-                                    , "creator" .= threadCreator
-                                    , "timeStamp" .= threadTimeStamp
-                                    ]
-
-createThread :: MVar Forum -> IO Int -> Text -> Text -> IO Thread
-createThread db nextID title creator = do
-  timeStamp <- liftIO getCurrentTime
-  threadID <- liftIO nextID
-  let thread = Thread { threadID = threadID
-                      , threadTimeStamp = timeStamp
-                      , threadCreator = creator
-                      , threadMessages = []
-                      , threadTitle = title
-                      }
-  modifyMVar db (return . (, thread) . Map.insert threadID thread)
-
-createMessage :: MVar Forum -> IO Int -> Text -> Text -> ID -> IO Message
-createMessage db nextID text creator threadID = do
-  timeStamp <- liftIO getCurrentTime
-  messageID <- liftIO nextID
-  let message = Message { messageID = messageID
-                        , messageTimeStamp = timeStamp
-                        , messageCreator = creator
-                        , messageText = text
-                        , messageThreadID = threadID
-                        }
-  modifyMVar db (return . (, message) . Map.update (Just . addMessage message) threadID)
-  where
-    addMessage message thread@(Thread {threadMessages}) =
-      thread{threadMessages = message:threadMessages}
-
-app :: MVar Forum -> IO Int -> Sockets.Broadcaster -> IO Application
-app database nextID broadcast = scottyApp $ do
+app :: Database -> Sockets.Broadcaster -> IO Application
+app db broadcast = scottyApp $ do
   get "/threads/:id" $
     param "id" >>= withThread json
   get "/threads" $
-    json =<< Map.elems <$> db
+    liftIO (listThreads db) >>= json
   post "/threads" $
     flip rescue (\msg -> status status400 >> text msg) $ do
       [title, creator] <- sequence $ param <$> ["title", "username"]
-      newThread <- liftIO (createThread database nextID title creator)
-      liftIO $ broadcast "one" (Aeson.encode newThread)
+      newThread <- liftIO (createThread db title creator Nothing)
+      liftIO $ broadcast newThread
       json newThread
-  get "/threads/:id/messages" $
-    param "id" >>= withThread (json . threadMessages)
-  post "/threads/:id/messages" $ do
-    threadID <- param "id"
-    flip rescue (\msg -> status status400 >> text msg) $ do
-      [title, creator] <- sequence $ param <$> ["title", "username"]
-      d <- db
-      if Map.member threadID d then
-        json =<< liftIO (createMessage database nextID title creator threadID)
-      else thread404
 
   where
-    db = liftIO (readMVar database)
-    withThread f threadID =
-      maybe thread404 f =<< Map.lookup threadID <$> db
+    withThread f idThread =
+      maybe thread404 f =<< liftIO (getThread db idThread)
+    withThread :: (Thread -> ActionM ()) -> ID -> ActionM ()
     thread404 = status status404 >> text "Thread not found"
 
 main :: IO ()
 main = do
   let port = 3000
-  database <- newMVar Map.empty
-  idGen <- newMVar 0
-  let generateID = modifyMVar idGen (return . dup . (+ 1))
+  database <- newDatabase
   (broadcast, server) <- Sockets.newServer
+  api <- app database broadcast
   putStrLn $ "Running on port " ++ show port
-  api <- app database generateID broadcast
   Warp.run port (websocketsOr defaultConnectionOptions server api)
