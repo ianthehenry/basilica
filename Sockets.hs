@@ -5,16 +5,14 @@ module Sockets (
 
 import           BasePrelude
 import           Control.Concurrent.MVar
-import           Control.Monad.IO.Class (liftIO)
 import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
 import           Data.ByteString.Lazy (ByteString)
-import           Data.Map (Map, (!))
+import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
-import qualified Data.Text.IO as Text
 import           Data.UUID (UUID)
 import           Data.UUID.V4 (nextRandom)
 import qualified Network.HTTP.Types.URI as URI
@@ -83,5 +81,12 @@ application state pending =
     flip finally (disconnect client >> putStrLn "disconnected") $ do
       modifyMVar_ state (return . addClient client)
       readMVar state >>= broadcast (alert "new client") []
+      talk client
     where
       disconnect client = modifyMVar_ state (return . removeClient client)
+
+
+talk :: Client -> IO ()
+talk client@(Client {clientConnection = conn}) = forever $ do
+  WS.receiveData conn :: IO ByteString
+  send "don't do that" client
