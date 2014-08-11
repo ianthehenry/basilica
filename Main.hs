@@ -12,6 +12,8 @@ import           Data.Time.Clock (UTCTime, getCurrentTime)
 import           Network.HTTP.Types
 import           Network.Wai (Application)
 import qualified Network.Wai.Handler.Warp as Warp
+import           Network.Wai.Handler.WebSockets (websocketsOr)
+import           Network.WebSockets.Connection (defaultConnectionOptions)
 import qualified Sockets
 import           Utils
 import           Web.Scotty
@@ -74,22 +76,24 @@ createMessage db nextID text creator threadID = do
     addMessage message thread@(Thread {threadMessages}) =
       thread{threadMessages = message:threadMessages}
 
-app :: MVar Forum -> IO Int -> IO Application
-app database nextID = scottyApp $ do
+app :: MVar Forum -> IO Int -> Sockets.Broadcaster -> IO Application
+app database nextID broadcast = scottyApp $ do
   get "/threads/:id" $
     param "id" >>= withThread json
   get "/threads" $
     json =<< Map.elems <$> db
   post "/threads" $
     flip rescue (\msg -> status status400 >> text msg) $ do
-      [title, creator] <- sequence $ param <$> ["title", "username"] 
-      json =<< liftIO (createThread database nextID title creator)
+      [title, creator] <- sequence $ param <$> ["title", "username"]
+      newThread <- liftIO (createThread database nextID title creator)
+      liftIO $ broadcast "one" (Aeson.encode newThread)
+      json newThread
   get "/threads/:id/messages" $
     param "id" >>= withThread (json . threadMessages)
   post "/threads/:id/messages" $ do
     threadID <- param "id"
     flip rescue (\msg -> status status400 >> text msg) $ do
-      [title, creator] <- sequence $ param <$> ["title", "username"] 
+      [title, creator] <- sequence $ param <$> ["title", "username"]
       d <- db
       if Map.member threadID d then
         json =<< liftIO (createMessage database nextID title creator threadID)
@@ -107,6 +111,7 @@ main = do
   database <- newMVar Map.empty
   idGen <- newMVar 0
   let generateID = modifyMVar idGen (return . dup . (+ 1))
-  forkIO Sockets.runServer
+  (broadcast, server) <- Sockets.newServer
   putStrLn $ "Running on port " ++ show port
-  Warp.run port =<< app database generateID
+  api <- app database generateID broadcast
+  Warp.run port (websocketsOr defaultConnectionOptions server api)

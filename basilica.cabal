@@ -19,7 +19,8 @@ executable basilica
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       bytestring,
+  build-depends:       wai-websockets,
+                       bytestring,
                        transformers,
                        uuid,
                        websockets,

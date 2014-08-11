@@ -1,10 +1,13 @@
 module Sockets (
-  runServer
+  newServer,
+  Path,
+  Broadcaster
 ) where
 
 import           BasePrelude
 import           Control.Concurrent.MVar
 import           Control.Monad.IO.Class (liftIO)
+import           Data.ByteString.Lazy (ByteString)
 import           Data.Map (Map, (!))
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -16,6 +19,7 @@ import qualified Network.HTTP.Types.URI as URI
 import qualified Network.WebSockets as WS
   
 type Path = String
+type Broadcaster = Path -> ByteString -> IO ()
 data Client = Client { clientPath :: Path
                      , clientIdentifier :: UUID
                      , clientConnection :: WS.Connection
@@ -37,16 +41,17 @@ addClient client@(Client {clientPath}) = Map.adjust (Set.insert client) clientPa
 removeClient :: Client -> ServerState -> ServerState
 removeClient client@(Client {clientPath}) = Map.adjust (Set.delete client) clientPath
 
-broadcast :: Path -> Text -> ServerState -> IO ()
+broadcast :: Path -> ByteString -> ServerState -> IO ()
 broadcast path message state =
   forM_ (state ! path) (flip WS.sendTextData message . clientConnection)
 
-runServer :: IO ()
-runServer = do
-  let port = 9160
-  putStrLn $ "sockets listening on port " <> show port
+newServer :: IO (Broadcaster, WS.ServerApp)
+newServer = do
   state <- newMVar newServerState
-  WS.runServer "0.0.0.0" port $ application state
+  return (makeBroadcast state, application state)
+  where
+    makeBroadcast db path msg =
+      readMVar db >>= broadcast path msg
 
 send :: Client -> Text -> IO ()
 send = WS.sendTextData . clientConnection
