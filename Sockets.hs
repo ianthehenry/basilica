@@ -80,7 +80,6 @@ application state pending =
   ifAccept pending $ \client ->
     flip finally (disconnect client >> putStrLn "disconnected") $ do
       modifyMVar_ state (return . addClient client)
-      readMVar state >>= broadcast (alert "new client") []
       talk client
     where
       disconnect client = modifyMVar_ state (return . removeClient client)

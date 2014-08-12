@@ -27,13 +27,12 @@ app db broadcast = scottyApp $ do
     liftIO (listThreads db) >>= json
   post (regex "/threads/(.*)") $ accessControl $
     flip rescue (\msg -> status status400 >> text msg) $ do
-      idParent <- pathToID <$> (param "1" `rescue` (\_ -> return ""))
+      idParent <- pathToID <$> (param "1" `rescue` (const $ return ""))
       [content, by] <- sequence $ param <$> ["content", "by"]
       flip withThread idParent $ \parent -> do
         newThread <- liftIO (createThread db content by parent)
         liftIO $ broadcast newThread
         json newThread
-
   where
     withThread f idThread = do
       liftIO $ print idThread
