@@ -2,8 +2,6 @@ module Main where
 
 import           BasePrelude hiding (app)
 import           Control.Monad.Trans (liftIO)
-import           Data.Text (Text)
-import qualified Data.Text as Text
 import           Database
 import           Network.HTTP.Types
 import           Network.Wai (Application)
@@ -16,21 +14,18 @@ import           Web.Scotty
 accessControl :: ActionM () -> ActionM ()
 accessControl = (>> setHeader "Access-Control-Allow-Origin" "*")
 
-pathToID :: Text -> ID
-pathToID = filter (/= "") . Text.splitOn "/"
-
 app :: Database -> Sockets.Broadcaster -> IO Application
 app db broadcast = scottyApp $ do
-  get (regex "/threads/(.*)") $ accessControl $
-    withThread json =<< pathToID <$> param "1"
+  get "/threads/:id" $ accessControl $
+    withThread json =<< param "id"
   get "/threads" $ accessControl $
-    liftIO (listThreads db) >>= json
-  post (regex "/threads/(.*)") $ accessControl $
+    liftIO (allThreads db) >>= json
+  post "/threads/:id" $ accessControl $
     flip rescue (\msg -> status status400 >> text msg) $ do
-      idParent <- pathToID <$> (param "1" `rescue` (const $ return ""))
+      idParent <- param "id"
       [content, by] <- sequence $ param <$> ["content", "by"]
       flip withThread idParent $ \parent -> do
-        newThread <- liftIO (createThread db content by parent)
+        newThread <- liftIO (createThread db by content parent)
         liftIO $ broadcast newThread
         json newThread
   where

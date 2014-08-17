@@ -1,63 +1,66 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module Database (
   module Types,
   Database,
   createThread,
   newDatabase,
   getThread,
-  listThreads
+  threadChildren,
+  allThreads
 ) where
 
-import           BasePrelude
-import           Control.Concurrent.MVar
-import           Control.Monad.Trans (liftIO)
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import           Data.Text (Text)
-import qualified Data.Text as Text
-import           Data.Time.Clock (getCurrentTime)
-import           Types
-import           Utils
+import BasePrelude
+import Data.Text (Text)
+import Data.Time.Clock (getCurrentTime, UTCTime)
+import Database.HDBC (run, withTransaction, quickQuery')
+import Database.HDBC.SqlValue (SqlValue, fromSql, toSql)
+import Database.HDBC.Sqlite3 (connectSqlite3, Connection)
+import Types
 
-type Database = (MVar (Map ID Thread), IO Int)
+type Database = Connection
+
+toThread :: [SqlValue] -> Thread
+toThread [idThread, by, content, idParent, at, count] =
+  Thread { threadID = fromSql idThread
+         , threadContent = fromSql content
+         , threadAt = fromSql at
+         , threadBy = fromSql by
+         , threadParentID = fromSql idParent
+         , threadCount = fromSql count
+         }
+  
+threadQuery :: Connection -> String -> [SqlValue] -> IO [Thread]
+threadQuery db whereClause args = fmap toThread <$> quickQuery' db query args
+  where query = unlines [ "select threads.*, count(children.id) from threads"
+                        , "left outer join threads as children"
+                        , "  on children.parent_id = threads.id"
+                        , whereClause
+                        , "group by threads.id;"
+                        ]
 
 getThread :: Database -> ID -> IO (Maybe Thread)
-getThread (db, _) idThread = Map.lookup idThread <$> readMVar db
+getThread db idThread = listToMaybe <$>
+  threadQuery db "where threads.id = ?" [toSql idThread]
 
-listThreads :: Database -> IO [Thread]
-listThreads (db, _) = fmap snd <$> Map.toList <$> readMVar db
+threadChildren :: Database -> ID -> IO [Thread]
+threadChildren db idThread = threadQuery db "where threads.parent_id = ?" [toSql idThread]
 
-insertThread :: Database -> Thread -> IO Thread
-insertThread (db, _) thread@(Thread {threadID}) =
-  modifyMVar db (return . (, thread) . Map.insert threadID thread)
+allThreads :: Database -> IO [Thread]
+allThreads db = threadQuery db "" []
+
+insertThread :: Database -> Text -> Text -> ID -> UTCTime -> IO Thread
+insertThread conn by content idParent at = withTransaction conn $ \db -> do
+  run db "insert into threads (by, content, parent_id, at) values (?, ?, ?, ?)" args
+  [lastRowID] <- head <$> quickQuery' db "select last_insert_rowid()" []
+  fromJust <$> getThread db (fromSql lastRowID)
+  where args = [ toSql by
+               , toSql content
+               , toSql idParent
+               , toSql at
+               ]
 
 createThread :: Database -> Text -> Text -> Thread -> IO Thread
-createThread db@(_, nextID) content creator (Thread {threadID = parentID}) = do
-  timeStamp <- liftIO getCurrentTime
-  newID <- ((parentID ++) . return . Text.pack . show) <$> liftIO nextID
-  insertThread db Thread { threadID = newID
-                         , threadAt = timeStamp
-                         , threadBy = creator
-                         , threadContent = content
-                         }
+createThread db by content (Thread {threadID = parentID}) =
+  insertThread db by content parentID =<< getCurrentTime
 
 newDatabase :: IO Database
-newDatabase = do
-  db <- newMVar Map.empty
-  idGen <- newMVar 0
-  let generateID = modifyMVar idGen (return . dup . (+ 1))
-  let database = (db, generateID)
-
-  timeStamp <- getCurrentTime
-  let root = Thread { threadID = []
-                    , threadAt = timeStamp
-                    , threadBy = "god"
-                    , threadContent = "Basilica"
-                    }
-  insertThread database root
-  first <- createThread database "test post please ignore" "ian" root
-  createThread database "well" "ian" first
-  createThread database "isn't that something" "ian" first
-  createThread database "a safe place for talking about haskell" "hao" root
-  return database
+newDatabase = connectSqlite3 "basilica.db"

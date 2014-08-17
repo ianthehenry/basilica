@@ -35,7 +35,7 @@ instance Ord Client where
   (<=) = (<=) `on` clientIdentifier
 
 newServerState :: ServerState
-newServerState = Map.fromList [([], Set.empty)]
+newServerState = Map.fromList [(0, Set.empty)]
 
 addClient :: Client -> ServerState -> ServerState
 addClient client@(Client {clientPath}) = Map.adjust (Set.insert client) clientPath
@@ -52,9 +52,7 @@ newServer = do
   state <- newMVar newServerState
   return (makeBroadcast state, application state)
   where
-    makeBroadcast db thread@(Thread {threadID}) = do
-      database <- readMVar db
-      forM_ (inits threadID) (flip (broadcast thread) database)
+    makeBroadcast db thread = readMVar db >>= broadcast thread 0
 
 send :: ByteString -> Client -> IO ()
 send text client = WS.sendTextData (clientConnection client) text
@@ -66,7 +64,7 @@ ifAccept pending callback =
       -- todo: use Applicative?
       conn <- WS.acceptRequest pending
       uuid <- nextRandom
-      callback Client { clientPath = []
+      callback Client { clientPath = 0
                       , clientConnection = conn
                       , clientIdentifier = uuid
                       }

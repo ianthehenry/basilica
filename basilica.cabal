@@ -19,12 +19,14 @@ executable basilica
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       wai-websockets,
-                       bytestring,
-                       transformers,
-                       uuid,
-                       websockets,
-                       base >=4.7 && <4.8
+  build-depends:       wai-websockets
+                     , base >=4.7 && <4.8
+                     , bytestring
+                     , transformers
+                     , uuid
+                     , websockets
+                     , HDBC >= 2.4.0.0
+                     , HDBC-sqlite3 >= 2.3.3.0
                      , scotty
                      , wai
                      , warp

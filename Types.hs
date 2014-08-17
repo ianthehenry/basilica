@@ -7,11 +7,14 @@ import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Aeson as Aeson
 import Data.Aeson ((.=))
+import BasePrelude
 
 data Thread = Thread { threadID :: ID
                      , threadBy :: User
                      , threadContent :: Text
                      , threadAt :: UTCTime
+                     , threadParentID :: ID
+                     , threadCount :: Int
                      }
 
 instance Aeson.ToJSON Thread where
@@ -19,7 +22,9 @@ instance Aeson.ToJSON Thread where
                                     , "content" .= threadContent
                                     , "by" .= threadBy
                                     , "at" .= threadAt
+                                    , "count" .= threadCount
+                                    , "idParent" .= threadParentID
                                     ]
 
 type User = Text
-type ID = [Text]
+type ID = Int
