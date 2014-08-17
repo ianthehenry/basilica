@@ -3,30 +3,28 @@ module Sockets (
   Broadcaster
 ) where
 
-import           BasePrelude
+import           BasePrelude hiding ((\\))
 import           Control.Concurrent.MVar
-import           Data.Aeson ((.=))
+import           Control.Concurrent.Suspend (sDelay)
+import           Control.Concurrent.Timer
 import qualified Data.Aeson as Aeson
 import           Data.ByteString.Lazy (ByteString)
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import           Data.Set (Set)
+import           Data.Set (Set, (\\))
 import qualified Data.Set as Set
-import           Data.Text (Text)
 import           Data.UUID (UUID)
 import           Data.UUID.V4 (nextRandom)
+import           Data.UnixTime (UnixTime, getUnixTime, secondsToUnixDiffTime, addUnixDiffTime)
 import qualified Network.HTTP.Types.URI as URI
 import qualified Network.WebSockets as WS
 import           Types
-
-type Path = ID
+import           Utils
 
 type Broadcaster = Thread -> IO ()
-data Client = Client { clientPath :: Path
-                     , clientIdentifier :: UUID
+data Client = Client { clientIdentifier :: UUID
+                     , clientLastPongTime :: UnixTime
                      , clientConnection :: WS.Connection
                      }
-type ServerState = Map Path (Set Client)
+type ServerState = Set Client
 
 instance Eq Client where
   (==) = (==) `on` clientIdentifier
@@ -35,24 +33,52 @@ instance Ord Client where
   (<=) = (<=) `on` clientIdentifier
 
 newServerState :: ServerState
-newServerState = Map.fromList [(0, Set.empty)]
+newServerState = Set.empty
 
 addClient :: Client -> ServerState -> ServerState
-addClient client@(Client {clientPath}) = Map.adjust (Set.insert client) clientPath
+addClient = Set.insert
 
 removeClient :: Client -> ServerState -> ServerState
-removeClient client@(Client {clientPath}) = Map.adjust (Set.delete client) clientPath
+removeClient = Set.delete
 
-broadcast :: Aeson.ToJSON a => a -> Path -> ServerState -> IO ()
-broadcast message path state =
-  forM_ (Map.findWithDefault Set.empty path state) (send (Aeson.encode message))
+broadcast :: Aeson.ToJSON a => a -> ServerState -> IO ()
+broadcast message state =
+  forM_ state (send (Aeson.encode message))
+
+clientsOlderThan :: UnixTime -> Set Client -> Set Client
+clientsOlderThan date = Set.filter ((< date) . clientLastPongTime)
+
+modifyAndReturn :: MVar a -> (a -> a) -> IO a
+modifyAndReturn mvar f = modifyMVar mvar (return . dup . f)
+
+ping :: WS.Connection -> IO ()
+ping = flip WS.sendPing ("ping" :: ByteString)
+
+heartbeatIntervalSeconds :: Int64
+heartbeatIntervalSeconds = 20
+
+heartbeat :: MVar ServerState -> IO ()
+heartbeat db = do
+  state <- readMVar db
+  now <- getUnixTime
+  let maxPongTime = secondsToUnixDiffTime (-2 * heartbeatIntervalSeconds)
+  let cutoff = addUnixDiffTime now maxPongTime
+  let badClients = clientsOlderThan cutoff state
+  forM_ badClients close
+  goodClients <- modifyAndReturn db (\\ badClients)
+  forM_ goodClients (ping . clientConnection)
+  where
+    close (Client {clientConnection}) =
+      WS.sendClose clientConnection ("pong better" :: ByteString)
 
 newServer :: IO (Broadcaster, WS.ServerApp)
 newServer = do
   state <- newMVar newServerState
+  repeatedTimer (heartbeat state) (sDelay heartbeatIntervalSeconds)
+  
   return (makeBroadcast state, application state)
   where
-    makeBroadcast db thread = readMVar db >>= broadcast thread 0
+    makeBroadcast db thread = readMVar db >>= broadcast thread
 
 send :: ByteString -> Client -> IO ()
 send text client = WS.sendTextData (clientConnection client) text
@@ -64,26 +90,34 @@ ifAccept pending callback =
       -- todo: use Applicative?
       conn <- WS.acceptRequest pending
       uuid <- nextRandom
-      callback Client { clientPath = 0
-                      , clientConnection = conn
+      time <- getUnixTime
+      callback Client { clientConnection = conn
                       , clientIdentifier = uuid
+                      , clientLastPongTime = time
                       }
     _ -> WS.rejectRequest pending "You can only connect to / right now."
 
-alert :: Text -> Aeson.Value
-alert msg = Aeson.object ["msg" .= msg]
+handleMessages :: IO () -> WS.Connection -> IO ()
+handleMessages onPong conn = WS.receive conn >>= \msg ->
+  case msg of
+    WS.DataMessage _     -> recurse
+    WS.ControlMessage cm -> case cm of
+      WS.Close _ -> return ()
+      WS.Pong _  -> onPong >> recurse
+      WS.Ping a  -> WS.send conn (WS.ControlMessage (WS.Pong a)) >> recurse
+  where recurse = handleMessages onPong conn
 
 application :: MVar ServerState -> WS.ServerApp
-application state pending =
+application db pending =
   ifAccept pending $ \client ->
     flip finally (disconnect client >> putStrLn "disconnected") $ do
-      modifyMVar_ state (return . addClient client)
-      talk client
+      modifyMVar_ db (return . addClient client)
+      handleMessages (updatePong client) (clientConnection client)
     where
-      disconnect client = modifyMVar_ state (return . removeClient client)
-
-
-talk :: Client -> IO ()
-talk client@(Client {clientConnection = conn}) = forever $ do
-  WS.receiveData conn :: IO ByteString
-  send "don't do that" client
+      updatePong client = modifyMVar_ db (setTime client)
+      setTime client state = do
+        now <- getUnixTime
+        -- because only the clientIdentifier matters,
+        -- this replaces the previous client
+        return $ Set.insert client{ clientLastPongTime = now } state
+      disconnect client = modifyMVar_ db (return . removeClient client)

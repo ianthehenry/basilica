@@ -19,7 +19,10 @@ executable basilica
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       wai-websockets
+  build-depends:       timers
+                     , unix-time
+                     , suspend
+                     , wai-websockets
                      , base >=4.7 && <4.8
                      , bytestring
                      , transformers
