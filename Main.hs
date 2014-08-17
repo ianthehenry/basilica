@@ -2,6 +2,7 @@ module Main where
 
 import           BasePrelude hiding (app)
 import           Control.Monad.Trans (liftIO)
+import qualified Data.Configurator as Conf
 import           Database
 import           Network.HTTP.Types
 import           Network.Wai (Application)
@@ -43,7 +44,8 @@ app db broadcast = scottyApp $ do
 
 main :: IO ()
 main = do
-  let port = 3000
+  conf <- Conf.require <$> Conf.load [Conf.Required "conf"]
+  port <- conf "port"
   database <- newDatabase
   (broadcast, server) <- Sockets.newServer
   api <- app database broadcast

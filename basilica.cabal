@@ -20,6 +20,7 @@ executable basilica
   -- other-modules:
   -- other-extensions:
   build-depends:       timers
+                     , configurator
                      , unix-time
                      , suspend
                      , wai-websockets
