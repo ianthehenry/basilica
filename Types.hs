@@ -13,7 +13,7 @@ data Thread = Thread { threadID :: ID
                      , threadBy :: User
                      , threadContent :: Text
                      , threadAt :: UTCTime
-                     , threadParentID :: ID
+                     , threadParentID :: Maybe ID
                      , threadCount :: Int
                      }
 

@@ -20,19 +20,26 @@ app db broadcast = scottyApp $ do
     withThread json =<< param "id"
   get "/threads" $ accessControl $
     liftIO (allThreads db) >>= json
+  post "/threads" $ accessControl $ 
+    with400 $ threadPost (return Nothing)
   post "/threads/:id" $ accessControl $
-    flip rescue (\msg -> status status400 >> text msg) $ do
-      idParent <- param "id"
-      [content, by] <- sequence $ param <$> ["content", "by"]
-      flip withThread idParent $ \parent -> do
-        newThread <- liftIO (createThread db by content parent)
-        liftIO $ broadcast newThread
-        json newThread
+    with400 $ threadPost (Just <$> param "id")
   where
     withThread f idThread = do
       liftIO $ print idThread
       maybe thread404 f =<< liftIO (getThread db idThread)
     thread404 = status status404 >> text "Thread not found"
+    with400 a = rescue a (\msg -> status status400 >> text msg)
+    threadPost idParent = do
+      maybeThread <- liftIO =<< makeThread <$> idParent <*> param "by" <*> param "content"
+      case maybeThread of
+        Just thread -> json thread
+        Nothing     -> thread404
+    makeThread idParent by content = do
+      newThread <- createThread db by content idParent
+      whenMaybe newThread broadcast
+      return newThread
+    whenMaybe = flip (maybe (return ()))
 
 main :: IO ()
 main = do

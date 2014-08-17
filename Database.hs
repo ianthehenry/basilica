@@ -11,7 +11,7 @@ module Database (
 import BasePrelude
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)
-import Database.HDBC (run, withTransaction, quickQuery')
+import Database.HDBC (SqlError(..), run, runRaw, withTransaction, quickQuery')
 import Database.HDBC.SqlValue (SqlValue, fromSql, toSql)
 import Database.HDBC.Sqlite3 (connectSqlite3, Connection)
 import Types
@@ -47,20 +47,36 @@ threadChildren db idThread = threadQuery db "where threads.parent_id = ?" [toSql
 allThreads :: Database -> IO [Thread]
 allThreads db = threadQuery db "" []
 
-insertThread :: Database -> Text -> Text -> ID -> UTCTime -> IO Thread
+insertThread :: Database -> Text -> Text -> Maybe ID -> UTCTime -> IO (Maybe Thread)
 insertThread conn by content idParent at = withTransaction conn $ \db -> do
-  run db "insert into threads (by, content, parent_id, at) values (?, ?, ?, ?)" args
-  [lastRowID] <- head <$> quickQuery' db "select last_insert_rowid()" []
-  fromJust <$> getThread db (fromSql lastRowID)
-  where args = [ toSql by
-               , toSql content
-               , toSql idParent
-               , toSql at
-               ]
+  inserted <- tryInsert db
+  if inserted then do
+    [lastRowID] <- head <$> quickQuery' db "select last_insert_rowid()" []
+    getThread db (fromSql lastRowID)
+  else
+    return Nothing
+  where
+    tryInsert db = catchJust isForeignKeyError
+      (run db query args >> return True)
+      (\_ -> return False)
+    isForeignKeyError SqlError{seNativeError = 19} = Just ()
+    isForeignKeyError _ = Nothing
+    query = unlines [ "insert into threads"
+                    , "(by, content, parent_id, at)"
+                    , "values (?, ?, ?, ?)"
+                    ]
+    args = [ toSql by
+           , toSql content
+           , toSql idParent
+           , toSql at
+           ]
 
-createThread :: Database -> Text -> Text -> Thread -> IO Thread
-createThread db by content (Thread {threadID = parentID}) =
+createThread :: Database -> Text -> Text -> Maybe ID -> IO (Maybe Thread)
+createThread db by content parentID =
   insertThread db by content parentID =<< getCurrentTime
 
 newDatabase :: IO Database
-newDatabase = connectSqlite3 "basilica.db"
+newDatabase = do
+  conn <- connectSqlite3 "basilica.db"
+  runRaw conn "COMMIT; PRAGMA foreign_keys = ON; BEGIN TRANSACTION;"
+  return conn
