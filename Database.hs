@@ -9,6 +9,7 @@ module Database (
 ) where
 
 import BasePrelude
+import System.FilePath
 import Control.Concurrent.Chan
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)
@@ -78,9 +79,9 @@ createPost :: Database -> Text -> Text -> Maybe ID -> IO (Maybe Post)
 createPost db by content parentID =
   insertPost db by content parentID =<< getCurrentTime
 
-newDatabase :: IO Database
-newDatabase = do
-  conn <- connectSqlite3 "basilica.db"
+newDatabase :: FilePath -> IO Database
+newDatabase path = do
+  conn <- connectSqlite3 path
   runRaw conn "COMMIT; PRAGMA foreign_keys = ON; BEGIN TRANSACTION;"
   newPosts <- newChan
   return (conn, newPosts)

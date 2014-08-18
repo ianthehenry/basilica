@@ -38,9 +38,9 @@ app db = scottyApp $ do
 
 main :: IO ()
 main = do
-  conf <- Conf.require <$> Conf.load [Conf.Required "conf"]
-  port <- conf "port"
-  db@(_, newPosts) <- newDatabase
+  conf <- Conf.load [Conf.Required "conf"]
+  port <- Conf.require conf "port"
+  db@(_, newPosts) <- newDatabase =<< Conf.require conf "dbpath"
   server <- Sockets.newServer newPosts
   api <- app db
   putStrLn $ "Running on port " ++ show port

@@ -20,6 +20,7 @@ executable basilica
   -- other-modules:
   -- other-extensions:
   build-depends:       timers
+                     , filepath
                      , configurator
                      , unix-time
                      , suspend
