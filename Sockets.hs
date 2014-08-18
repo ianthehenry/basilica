@@ -110,7 +110,7 @@ handleMessages onPong conn = WS.receive conn >>= \msg ->
 application :: MVar ServerState -> WS.ServerApp
 application db pending =
   ifAccept pending $ \client ->
-    flip finally (disconnect client >> putStrLn "disconnected") $ do
+    flip finally (disconnect client) $ do
       modifyMVar_ db (return . addClient client)
       handleMessages (updatePong client) (clientConnection client)
     where
