@@ -17,29 +17,27 @@ accessControl = (>> setHeader "Access-Control-Allow-Origin" "*")
 
 app :: Database -> Sockets.Broadcaster -> IO Application
 app db broadcast = scottyApp $ do
-  get "/threads/:id" $ accessControl $
-    withThread json =<< param "id"
-  get "/threads" $ accessControl $
-    liftIO (allThreads db) >>= json
-  post "/threads" $ accessControl $ 
-    with400 $ threadPost (return Nothing)
-  post "/threads/:id" $ accessControl $
-    with400 $ threadPost (Just <$> param "id")
+  get "/posts/:id" $ accessControl $
+    withPost json =<< param "id"
+  get "/posts" $ accessControl $
+    liftIO (allPosts db) >>= json
+  post "/posts" $ accessControl $
+    with400 $ postPost (return Nothing)
+  post "/posts/:id" $ accessControl $
+    with400 $ postPost (Just <$> param "id")
   where
-    withThread f idThread = do
-      liftIO $ print idThread
-      maybe thread404 f =<< liftIO (getThread db idThread)
-    thread404 = status status404 >> text "Thread not found"
+    withPost f idPost = do
+      liftIO $ print idPost
+      maybe post404 f =<< liftIO (getPost db idPost)
+    post404 = status status404 >> text "Post not found"
     with400 a = rescue a (\msg -> status status400 >> text msg)
-    threadPost idParent = do
-      maybeThread <- liftIO =<< makeThread <$> idParent <*> param "by" <*> param "content"
-      case maybeThread of
-        Just thread -> json thread
-        Nothing     -> thread404
-    makeThread idParent by content = do
-      newThread <- createThread db by content idParent
-      whenMaybe newThread broadcast
-      return newThread
+    postPost idParent = do
+      maybePost <- liftIO =<< makePost <$> idParent <*> param "by" <*> param "content"
+      maybe post404 json maybePost
+    makePost idParent by content = do
+      newPost <- createPost db by content idParent
+      whenMaybe newPost broadcast
+      return newPost
     whenMaybe = flip (maybe (return ()))
 
 main :: IO ()

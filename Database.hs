@@ -1,11 +1,11 @@
 module Database (
   module Types,
   Database,
-  createThread,
+  createPost,
   newDatabase,
-  getThread,
-  threadChildren,
-  allThreads
+  getPost,
+  postChildren,
+  allPosts
 ) where
 
 import BasePrelude
@@ -18,41 +18,41 @@ import Types
 
 type Database = Connection
 
-toThread :: [SqlValue] -> Thread
-toThread [idThread, by, content, idParent, at, count] =
-  Thread { threadID = fromSql idThread
-         , threadContent = fromSql content
-         , threadAt = fromSql at
-         , threadBy = fromSql by
-         , threadParentID = fromSql idParent
-         , threadCount = fromSql count
-         }
-  
-threadQuery :: Connection -> String -> [SqlValue] -> IO [Thread]
-threadQuery db whereClause args = fmap toThread <$> quickQuery' db query args
-  where query = unlines [ "select threads.*, count(children.id) from threads"
-                        , "left outer join threads as children"
-                        , "  on children.parent_id = threads.id"
+toPost :: [SqlValue] -> Post
+toPost [idPost, by, content, idParent, at, count] =
+  Post { postID = fromSql idPost
+       , postContent = fromSql content
+       , postAt = fromSql at
+       , postBy = fromSql by
+       , postParentID = fromSql idParent
+       , postCount = fromSql count
+       }
+
+postQuery :: Connection -> String -> [SqlValue] -> IO [Post]
+postQuery db whereClause args = fmap toPost <$> quickQuery' db query args
+  where query = unlines [ "select posts.*, count(children.id) from posts"
+                        , "left outer join posts as children"
+                        , "  on children.parent_id = posts.id"
                         , whereClause
-                        , "group by threads.id;"
+                        , "group by posts.id;"
                         ]
 
-getThread :: Database -> ID -> IO (Maybe Thread)
-getThread db idThread = listToMaybe <$>
-  threadQuery db "where threads.id = ?" [toSql idThread]
+getPost :: Database -> ID -> IO (Maybe Post)
+getPost db idPost = listToMaybe <$>
+  postQuery db "where posts.id = ?" [toSql idPost]
 
-threadChildren :: Database -> ID -> IO [Thread]
-threadChildren db idThread = threadQuery db "where threads.parent_id = ?" [toSql idThread]
+postChildren :: Database -> ID -> IO [Post]
+postChildren db idPost = postQuery db "where posts.parent_id = ?" [toSql idPost]
 
-allThreads :: Database -> IO [Thread]
-allThreads db = threadQuery db "" []
+allPosts :: Database -> IO [Post]
+allPosts db = postQuery db "" []
 
-insertThread :: Database -> Text -> Text -> Maybe ID -> UTCTime -> IO (Maybe Thread)
-insertThread conn by content idParent at = withTransaction conn $ \db -> do
+insertPost :: Database -> Text -> Text -> Maybe ID -> UTCTime -> IO (Maybe Post)
+insertPost conn by content idParent at = withTransaction conn $ \db -> do
   inserted <- tryInsert db
   if inserted then do
     [lastRowID] <- head <$> quickQuery' db "select last_insert_rowid()" []
-    getThread db (fromSql lastRowID)
+    getPost db (fromSql lastRowID)
   else
     return Nothing
   where
@@ -61,7 +61,7 @@ insertThread conn by content idParent at = withTransaction conn $ \db -> do
       (\_ -> return False)
     isForeignKeyError SqlError{seNativeError = 19} = Just ()
     isForeignKeyError _ = Nothing
-    query = unlines [ "insert into threads"
+    query = unlines [ "insert into posts"
                     , "(by, content, parent_id, at)"
                     , "values (?, ?, ?, ?)"
                     ]
@@ -71,9 +71,9 @@ insertThread conn by content idParent at = withTransaction conn $ \db -> do
            , toSql at
            ]
 
-createThread :: Database -> Text -> Text -> Maybe ID -> IO (Maybe Thread)
-createThread db by content parentID =
-  insertThread db by content parentID =<< getCurrentTime
+createPost :: Database -> Text -> Text -> Maybe ID -> IO (Maybe Post)
+createPost db by content parentID =
+  insertPost db by content parentID =<< getCurrentTime
 
 newDatabase :: IO Database
 newDatabase = do

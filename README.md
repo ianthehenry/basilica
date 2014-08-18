@@ -26,7 +26,7 @@ Basilica exposes a simple CRUD API, and is designed to be easy for computers to 
 
 ## Models
 
-### Thread
+### Post
 
 ```json
 {
@@ -40,53 +40,53 @@ Basilica exposes a simple CRUD API, and is designed to be easy for computers to 
 }
 ```
 
-- `id` is a monotonically increasing identifier, and *it is the only field that should be used for sorting threads*.
+- `id` is a monotonically increasing identifier, and *it is the only field that should be used for sorting posts*.
 - `by` is currently just a string. Later it may be something else.
-- `at` is a string representing the date that the thread was created, in ISO 8601 format. This field exists to be displayed to the user; it should not be used for sorting or paging.
-- `count` is the *total number of children that this thread has*, regardless of the number of children returned in any response.
+- `at` is a string representing the date that the post was created, in ISO 8601 format. This field exists to be displayed to the user; it should not be used for sorting or paging.
+- `count` is the *total number of children that this post has*, regardless of the number of children returned in any response.
 - `children` some responses may include children. This is *not necessarily an exhaustive list*. Comparing the number of elements in this field to the `count` field can tell you if there are more children to load.
 
 ## Routes
 
-### `POST /threads/:idParent`
+### `POST /posts/:idParent`
 
-- for: creating a new thread as a child of the specified `idParent`
+- for: creating a new post as a child of the specified `idParent`
 - arguments: an `x-www-form-urlencoded` body is expected with
     - `by` (any string)
         - required
     - `content` (any string)
-- response: the newly created thread, JSON-encoded
-    - if the thread has a `count` other than `0`, that's a bug
-    - the thread will not have `children`
+- response: the newly created post, JSON-encoded
+    - if the post has a `count` other than `0`, that's a bug
+    - the post will not have `children`
 
-### `GET /threads/:id`
+### `GET /posts/:id`
 
-- for: loading threads and thread children
+- for: loading posts and post children
 - arguments: query parameters
     - `depth`: how deeply to recursively load `children`
         - *not currently implemented*
         - default: `1`
         - if `0`, the response will not include `children` at all
         - valid values: just `0` and `1` right now
-    - `after`: the `id` of a thread
+    - `after`: the `id` of a post
         - *not currently implemented*
         - optional
         - ignored if `depth` is `0`
-        - the response will not include any threads created before this in the `children` list (recursively, if multiple depths are ever supported)
+        - the response will not include any posts created before this in the `children` list (recursively, if multiple depths are ever supported)
     - `limit`: the maximum number of `children` to load
         - *not currently implemented*
         - default: `50`
         - ignored if `depth` is `0`
         - valid values: `1` to `500`
         - applies recursively, if multiple depths are ever supported
-- response: a JSON-encoded thread
+- response: a JSON-encoded post
     - if `depth` is greater than `0`, it will include `children`
     - remember that `count` is always the *total* number of children, regardless of the `limit`
 
-### `GET /threads`
+### `GET /posts`
 
-- for: loading every single thread in the entire database
-- response: a JSON array of threads, with no `children`
+- for: loading every single post in the entire database
+- response: a JSON array of posts, with no `children`
 
 ## Known clients
 

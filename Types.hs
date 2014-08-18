@@ -1,5 +1,5 @@
 module Types (
-  Thread(..),
+  Post(..),
   User, ID
 ) where
 
@@ -9,22 +9,22 @@ import qualified Data.Aeson as Aeson
 import Data.Aeson ((.=))
 import BasePrelude
 
-data Thread = Thread { threadID :: ID
-                     , threadBy :: User
-                     , threadContent :: Text
-                     , threadAt :: UTCTime
-                     , threadParentID :: Maybe ID
-                     , threadCount :: Int
-                     }
+data Post = Post { postID :: ID
+                 , postBy :: User
+                 , postContent :: Text
+                 , postAt :: UTCTime
+                 , postParentID :: Maybe ID
+                 , postCount :: Int
+                 }
 
-instance Aeson.ToJSON Thread where
-  toJSON Thread {..} = Aeson.object [ "id" .= threadID
-                                    , "content" .= threadContent
-                                    , "by" .= threadBy
-                                    , "at" .= threadAt
-                                    , "count" .= threadCount
-                                    , "idParent" .= threadParentID
-                                    ]
+instance Aeson.ToJSON Post where
+  toJSON Post {..} = Aeson.object [ "id" .= postID
+                                  , "content" .= postContent
+                                  , "by" .= postBy
+                                  , "at" .= postAt
+                                  , "count" .= postCount
+                                  , "idParent" .= postParentID
+                                  ]
 
 type User = Text
 type ID = Int

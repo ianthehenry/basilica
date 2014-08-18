@@ -19,7 +19,7 @@ import qualified Network.WebSockets as WS
 import           Types
 import           Utils
 
-type Broadcaster = Thread -> IO ()
+type Broadcaster = Post -> IO ()
 data Client = Client { clientIdentifier :: UUID
                      , clientLastPongTime :: UnixTime
                      , clientConnection :: WS.Connection
@@ -75,10 +75,10 @@ newServer :: IO (Broadcaster, WS.ServerApp)
 newServer = do
   state <- newMVar newServerState
   repeatedTimer (heartbeat state) (sDelay heartbeatIntervalSeconds)
-  
+
   return (makeBroadcast state, application state)
   where
-    makeBroadcast db thread = readMVar db >>= broadcast thread
+    makeBroadcast db post = readMVar db >>= broadcast post
 
 send :: ByteString -> Client -> IO ()
 send text client = WS.sendTextData (clientConnection client) text
