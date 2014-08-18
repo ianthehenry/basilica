@@ -3,7 +3,7 @@
 A basilica is like a forum, but for a few ill-defined differences. For more detail please consult the table below, adapted from a crude sketch I made while drunk.
 
 Forum | Basilica
------ | --------
+----: | :-------
 PHP | Haskell
 90s | 2010s
 trolls | friends
