@@ -15,8 +15,8 @@ import           Web.Scotty
 accessControl :: ActionM () -> ActionM ()
 accessControl = (>> setHeader "Access-Control-Allow-Origin" "*")
 
-app :: Database -> Sockets.Broadcaster -> IO Application
-app db broadcast = scottyApp $ do
+app :: Database -> IO Application
+app db = scottyApp $ do
   get "/posts/:id" $ accessControl $
     withPost json =<< param "id"
   get "/posts" $ accessControl $
@@ -34,18 +34,14 @@ app db broadcast = scottyApp $ do
     postPost idParent = do
       maybePost <- liftIO =<< makePost <$> idParent <*> param "by" <*> param "content"
       maybe post404 json maybePost
-    makePost idParent by content = do
-      newPost <- createPost db by content idParent
-      whenMaybe newPost broadcast
-      return newPost
-    whenMaybe = flip (maybe (return ()))
+    makePost idParent by content = createPost db by content idParent
 
 main :: IO ()
 main = do
   conf <- Conf.require <$> Conf.load [Conf.Required "conf"]
   port <- conf "port"
-  database <- newDatabase
-  (broadcast, server) <- Sockets.newServer
-  api <- app database broadcast
+  db@(_, newPosts) <- newDatabase
+  server <- Sockets.newServer newPosts
+  api <- app db
   putStrLn $ "Running on port " ++ show port
   Warp.run port (websocketsOr defaultConnectionOptions server api)

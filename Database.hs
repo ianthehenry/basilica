@@ -9,6 +9,7 @@ module Database (
 ) where
 
 import BasePrelude
+import Control.Concurrent.Chan
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Database.HDBC (SqlError(..), run, runRaw, withTransaction, quickQuery')
@@ -16,7 +17,7 @@ import Database.HDBC.SqlValue (SqlValue, fromSql, toSql)
 import Database.HDBC.Sqlite3 (connectSqlite3, Connection)
 import Types
 
-type Database = Connection
+type Database = (Connection, Chan Post)
 
 toPost :: [SqlValue] -> Post
 toPost [idPost, by, content, idParent, at, count] =
@@ -29,7 +30,7 @@ toPost [idPost, by, content, idParent, at, count] =
        }
 
 postQuery :: Connection -> String -> [SqlValue] -> IO [Post]
-postQuery db whereClause args = fmap toPost <$> quickQuery' db query args
+postQuery conn whereClause args = fmap toPost <$> quickQuery' conn query args
   where query = unlines [ "select posts.*, count(children.id) from posts"
                         , "left outer join posts as children"
                         , "  on children.parent_id = posts.id"
@@ -38,26 +39,28 @@ postQuery db whereClause args = fmap toPost <$> quickQuery' db query args
                         ]
 
 getPost :: Database -> ID -> IO (Maybe Post)
-getPost db idPost = listToMaybe <$>
-  postQuery db "where posts.id = ?" [toSql idPost]
+getPost (conn, _) idPost = listToMaybe <$>
+  postQuery conn "where posts.id = ?" [toSql idPost]
 
 postChildren :: Database -> ID -> IO [Post]
-postChildren db idPost = postQuery db "where posts.parent_id = ?" [toSql idPost]
+postChildren (conn, _) idPost = postQuery conn "where posts.parent_id = ?" [toSql idPost]
 
 allPosts :: Database -> IO [Post]
-allPosts db = postQuery db "" []
+allPosts (conn, _) = postQuery conn "" []
 
 insertPost :: Database -> Text -> Text -> Maybe ID -> UTCTime -> IO (Maybe Post)
-insertPost conn by content idParent at = withTransaction conn $ \db -> do
-  inserted <- tryInsert db
+insertPost db@(rawConn, newPosts) by content idParent at = withTransaction rawConn $ \conn -> do
+  inserted <- tryInsert conn
   if inserted then do
-    [lastRowID] <- head <$> quickQuery' db "select last_insert_rowid()" []
-    getPost db (fromSql lastRowID)
+    [lastRowID] <- head <$> quickQuery' conn "select last_insert_rowid()" []
+    post <- fromJust <$> getPost db (fromSql lastRowID)
+    writeChan newPosts post
+    return (Just post)
   else
     return Nothing
   where
-    tryInsert db = catchJust isForeignKeyError
-      (run db query args >> return True)
+    tryInsert conn = catchJust isForeignKeyError
+      (run conn query args >> return True)
       (\_ -> return False)
     isForeignKeyError SqlError{seNativeError = 19} = Just ()
     isForeignKeyError _ = Nothing
@@ -79,4 +82,5 @@ newDatabase :: IO Database
 newDatabase = do
   conn <- connectSqlite3 "basilica.db"
   runRaw conn "COMMIT; PRAGMA foreign_keys = ON; BEGIN TRANSACTION;"
-  return conn
+  newPosts <- newChan
+  return (conn, newPosts)

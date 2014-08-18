@@ -4,6 +4,7 @@ module Sockets (
 ) where
 
 import           BasePrelude hiding ((\\))
+import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar
 import           Control.Concurrent.Suspend (sDelay)
 import           Control.Concurrent.Timer
@@ -71,12 +72,12 @@ heartbeat db = do
     close (Client {clientConnection}) =
       WS.sendClose clientConnection ("pong better" :: ByteString)
 
-newServer :: IO (Broadcaster, WS.ServerApp)
-newServer = do
+newServer :: Chan Post -> IO WS.ServerApp
+newServer chan = do
   state <- newMVar newServerState
   repeatedTimer (heartbeat state) (sDelay heartbeatIntervalSeconds)
-
-  return (makeBroadcast state, application state)
+  forkIO $ getChanContents chan >>= mapM_ (makeBroadcast state)
+  return $ application state
   where
     makeBroadcast db post = readMVar db >>= broadcast post
 
