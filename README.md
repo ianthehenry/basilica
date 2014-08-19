@@ -90,8 +90,19 @@ Basilica exposes a simple CRUD API, and is designed to be easy for computers to 
 
 ### `GET /posts`
 
-- for: loading every single post in the entire database
-- response: a JSON array of posts, with no `children`
+- for: loading every single post in the entire database, catching up after a disconnect (with `after`)
+- arguments: query parameters
+    - `after`: the `id` of a post
+        - optional
+        - the response will only contain posts created after the specified post
+    - `limit`: the maximum number of posts to return
+        - **not currently implemented**
+        - default: `50`
+        - valid values: `1` to `500`
+- response
+    - if `after` is specified, and there were more than `limit` posts to return, this returns... some error code. I'm not sure what though. `410`, maybe?
+        - **not currently implemented**
+    - otherwise, a list of posts with no `children` fields
 
 ## Known clients
 

@@ -4,6 +4,7 @@ import           BasePrelude hiding (app)
 import           Control.Monad.Trans (liftIO)
 import           Data.ByteString (ByteString)
 import qualified Data.Configurator as Conf
+import           Data.Text.Lazy (Text)
 import           Database
 import           Network.HTTP.Types
 import           Network.Wai (Application)
@@ -14,6 +15,9 @@ import           Network.WebSockets.Connection (defaultConnectionOptions)
 import qualified Sockets
 import           Web.Scotty
 
+maybeParam :: Parsable a => Text -> ActionM (Maybe a)
+maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
+
 basilica :: Maybe ByteString -> Database -> IO Application
 basilica origin db = scottyApp $ do
   case origin of
@@ -21,8 +25,9 @@ basilica origin db = scottyApp $ do
     Just o -> middleware (addHeaders [("Access-Control-Allow-Origin", o)])
   get "/posts/:id" $
     withPost json =<< param "id"
-  get "/posts" $
-    liftIO (allPosts db) >>= json
+  get "/posts" $ do
+    since <- maybeParam "after"
+    liftIO (getPostsSince db since) >>= json
   post "/posts" $
     with400 $ postPost (return Nothing)
   post "/posts/:id" $

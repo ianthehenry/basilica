@@ -2,20 +2,20 @@ module Database (
   module Types,
   Database,
   createPost,
+  getPostsSince,
   newDatabase,
   getPost,
   postChildren,
-  allPosts
 ) where
 
 import BasePrelude
-import System.FilePath
 import Control.Concurrent.Chan
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Database.HDBC (SqlError(..), run, runRaw, withTransaction, quickQuery')
 import Database.HDBC.SqlValue (SqlValue, fromSql, toSql)
 import Database.HDBC.Sqlite3 (connectSqlite3, Connection)
+import System.FilePath
 import Types
 
 type Database = (Connection, Chan Post)
@@ -46,8 +46,9 @@ getPost (conn, _) idPost = listToMaybe <$>
 postChildren :: Database -> ID -> IO [Post]
 postChildren (conn, _) idPost = postQuery conn "where posts.parent_id = ?" [toSql idPost]
 
-allPosts :: Database -> IO [Post]
-allPosts (conn, _) = postQuery conn "" []
+getPostsSince :: Database -> Maybe ID -> IO [Post]
+getPostsSince (conn, _) Nothing = postQuery conn "" []
+getPostsSince (conn, _) (Just idPost) = postQuery conn "where posts.id > ?" [toSql idPost]
 
 insertPost :: Database -> Text -> Text -> Maybe ID -> UTCTime -> IO (Maybe Post)
 insertPost db@(rawConn, newPosts) by content idParent at = withTransaction rawConn $ \conn -> do
