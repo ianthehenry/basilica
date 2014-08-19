@@ -14,9 +14,11 @@ import           Network.WebSockets.Connection (defaultConnectionOptions)
 import qualified Sockets
 import           Web.Scotty
 
-app :: ByteString -> Database -> IO Application
-app origin db = scottyApp $ do
-  middleware (addHeaders [("Access-Control-Allow-Origin", origin)])
+basilica :: Maybe ByteString -> Database -> IO Application
+basilica origin db = scottyApp $ do
+  case origin of
+    Nothing -> return ()
+    Just o -> middleware (addHeaders [("Access-Control-Allow-Origin", o)])
   get "/posts/:id" $
     withPost json =<< param "id"
   get "/posts" $
@@ -46,9 +48,9 @@ main :: IO ()
 main = do
   conf <- Conf.load [Conf.Required "conf"]
   port <- Conf.require conf "port"
-  origin <- Conf.require conf "client-origin"
+  origin <- Conf.lookup conf "client-origin"
   db@(_, newPosts) <- newDatabase =<< Conf.require conf "dbpath"
   server <- Sockets.newServer newPosts
-  api <- app origin db
+  api <- basilica origin db
   putStrLn $ "Running on port " ++ show port
   Warp.run port (websocketsOr defaultConnectionOptions server api)
