@@ -36,7 +36,9 @@ postQuery conn whereClause args = fmap toPost <$> quickQuery' conn query args
                         , "left outer join posts as children"
                         , "  on children.parent_id = posts.id"
                         , whereClause
-                        , "group by posts.id;"
+                        , "group by posts.id"
+                        , "order by posts.id desc"
+                        , ";"
                         ]
 
 getPost :: Database -> ID -> IO (Maybe Post)
