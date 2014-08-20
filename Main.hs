@@ -18,6 +18,14 @@ import           Web.Scotty
 maybeParam :: Parsable a => Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
 
+emailCode :: Email -> CodeRecord -> IO ()
+emailCode email CodeRecord{..} = print $ mconcat [email, " - ", codeValue]
+
+generateCode :: Database -> Email -> IO ()
+generateCode db email = do
+  code <- createCode db email
+  maybe (return ()) (emailCode email) code
+
 basilica :: Maybe ByteString -> Database -> IO Application
 basilica origin db = scottyApp $ do
   case origin of
@@ -32,6 +40,16 @@ basilica origin db = scottyApp $ do
     with400 $ postPost (return Nothing)
   post "/posts/:id" $
     with400 $ postPost (Just <$> param "id")
+  post "/codes" $
+    with400 $ do
+      email <- param "email"
+      liftIO (generateCode db email)
+      status status200
+  post "/tokens" $
+    with400 $ do
+      code <- param "code"
+      token <- liftIO (createToken db code)
+      maybe (status status401) json token
   where
     withPost f idPost = do
       liftIO $ print idPost
