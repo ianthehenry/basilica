@@ -2,7 +2,27 @@ CREATE TABLE posts (
   id INTEGER PRIMARY KEY NOT NULL,
   by TEXT NOT NULL,
   content TEXT NOT NULL,
-  parent_id INTEGER NULL,
+  id_parent INTEGER NULL,
   at TEXT NOT NULL,
-  FOREIGN KEY(parent_id) REFERENCES posts(id)
+  FOREIGN KEY(id_parent) REFERENCES posts(id)
+);
+
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY NOT NULL,
+  email TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE tokens (
+  id INTEGER PRIMARY KEY NOT NULL,
+  token TEXT UNIQUE NOT NULL,
+  id_user INTEGER NOT NULL,
+  FOREIGN KEY(id_user) REFERENCES users(id)
+);
+
+CREATE TABLE codes (
+  code TEXT PRIMARY KEY NOT NULL,
+  generated_at TEXT NOT NULL,
+  valid INTEGER NOT NULL,
+  id_user INTEGER NOT NULL,
+  FOREIGN KEY(id_user) REFERENCES users(id)
 );

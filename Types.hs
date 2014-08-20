@@ -1,6 +1,10 @@
 module Types (
   Post(..),
-  User, ID
+  CodeRecord(..),
+  TokenRecord(..),
+  User(..),
+  ID, Email,
+  Token, Code
 ) where
 
 import Data.Text (Text)
@@ -10,11 +14,26 @@ import Data.Aeson ((.=))
 import BasePrelude
 
 data Post = Post { postID :: ID
-                 , postBy :: User
+                 , postBy :: Text
                  , postContent :: Text
                  , postAt :: UTCTime
                  , postParentID :: Maybe ID
                  , postCount :: Int
+                 }
+
+data CodeRecord = CodeRecord { codeValue :: Code
+                             , codeGeneratedAt :: UTCTime
+                             , codeValid :: Bool
+                             , codeUserID :: ID
+                             }
+
+data TokenRecord = TokenRecord { tokenID :: ID
+                               , tokenValue :: Token
+                               , tokenUserID :: ID
+                               }
+
+data User = User { userID :: ID
+                 , userEmail :: Text
                  }
 
 instance Aeson.ToJSON Post where
@@ -26,5 +45,7 @@ instance Aeson.ToJSON Post where
                                   , "idParent" .= postParentID
                                   ]
 
-type User = Text
 type ID = Int
+type Email = Text
+type Token = Text
+type Code = Text
