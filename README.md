@@ -24,19 +24,31 @@ Small bits and pieces might happen to work here and there, but such behavior sho
 
 Basilica exposes a simple CRUD API, and is designed to be easy for computers to speak to. There are a few models that it speaks, always in JSON:
 
+## Authentication
+
+There's a goofy hand-rolled auth scheme.
+
+There are no passwords. Authentication is done purely through email. The process looks this:
+
+- request a code (see `POST /codes`)
+- Basilica emails it to you
+- you trade in the code for a token (see `POST /tokens`)
+- you use that token to authenticate all future requests (details to follow)
+
+This is similar to the "forgot my password" flow found in most apps, except that you don't have to pretend to remember anything.
+
 ## Models
 
 ### Post
 
 ```json
-{
-  "id": 1,
-  "idParent": 0,
-  "by": "ian",
-  "at": "2014-08-17T01:19:15.139Z",
-  "count": 0,
-  "content": "any string",
-  "children": []
+{ "id": 49
+, "idParent": 14
+, "by": "ian"
+, "at": "2014-08-17T01:19:15.139Z"
+, "count": 0
+, "content": "any string"
+, "children": []
 }
 ```
 
@@ -46,6 +58,31 @@ Basilica exposes a simple CRUD API, and is designed to be easy for computers to 
 - `at` is a string representing the date that the post was created, in ISO 8601 format. This field exists to be displayed to the user; it should not be used for sorting or paging. Use `id` for that.
 - `count` is the *total number of children that this post has*, regardless of the number of children returned in any response.
 - `children` is a list of posts whose `idParent` is equal to this post's `id`. This is *not necessarily an exhaustive list*. Comparing the number of elements in this field to the `count` field can tell you if there are more children to load.
+    - `children` will *always* be sorted by `id`, with newer posts (larger `id`s) in the front of the list
+
+### User
+
+```json
+{ "id": 32
+, "email": "name@example.com"
+, "face": {}
+}
+```
+
+- `face` is an object that indicates how to render a thumbnail of the user. Currently the only valid options are:
+    - `{ "gravatar": "a130ced3f36ffd4604f4dae04b2b3bcd" }`
+    - `{ "string": "☃" }`
+    - **not implemented**
+- there'll be more fields later, probably
+
+### Token
+
+```json
+{ "id": 91
+, "token": "a long string"
+, "idUser": 32
+}
+```
 
 ## Routes
 
@@ -63,23 +100,24 @@ Basilica exposes a simple CRUD API, and is designed to be easy for computers to 
 - response: the newly created post, JSON-encoded
     - if the post has a `count` other than `0`, that's a bug
     - the post will not have `children`
+- note: eventually this will require a token and not take a `by` field, but that is **not implemented**
 
 ### `GET /posts/:id`
 
 - for: loading posts and post children
 - arguments: query parameters
     - `depth`: how deeply to recursively load `children`
-        - **not currently implemented**
+        - **not implemented**
         - default: `1`
         - if `0`, the response will not include `children` at all
         - valid values: just `0` and `1` right now
     - `after`: the `id` of a post
-        - **not currently implemented**
+        - **not implemented**
         - optional
         - ignored if `depth` is `0`
         - the response will not include any posts created before this in the `children` list (recursively, if multiple depths are ever supported)
     - `limit`: the maximum number of `children` to load
-        - **not currently implemented**
+        - **not implemented**
         - default: `50`
         - ignored if `depth` is `0`
         - valid values: `1` to `500`
@@ -96,13 +134,58 @@ Basilica exposes a simple CRUD API, and is designed to be easy for computers to 
         - optional
         - the response will only contain posts created after the specified post
     - `limit`: the maximum number of posts to return
-        - **not currently implemented**
+        - **not implemented**
         - default: `50`
         - valid values: `1` to `500`
-- response
+- response:
     - if `after` is specified, and there were more than `limit` posts to return, this returns... some error code. I'm not sure what though. `410`, maybe?
-        - **not currently implemented**
-    - otherwise, a list of posts with no `children` fields
+        - **not implemented**
+    - otherwise, a JSON array of posts with no `children` fields, sorted by `id` from newest to oldest
+
+### `POST /codes`
+
+- for: creating a new code, which can be used to obtain a `token`
+- arguments:
+    - `email`: the email address of the user for which you would like to create a code
+- response: this route will always return an empty response body with a `200` status code, regardless of whether `email` corresponds to a valid email address
+    - a timing attack can absolutely be used to determine if the email corresponds to a valid account or not; knock yourself out
+- note: if the `email` corresponds to a `user`, this route has the side effect of emailing the user a `code` that can be used to redeem a `token`
+- **not implemented**
+
+### `DELETE /codes/:code`
+
+- for: revoking a code, in case it was sent in error
+- **not implemented**
+- or documented
+
+### `POST /tokens`
+
+- for: creating a new token
+- arguments:
+    - `code`: a code obtained from a call to `POST /codes`
+        - required
+- note: auth tokens don't do anything yet
+- response:
+    - if the code is valid, a JSON-encoded token
+    - otherwise, `401`
+- side effect: invalidates the `code` specified
+- **not implemented**
+
+### `GET /tokens`
+
+- for: listing tokens
+- response: an array of JSON-encoded token objects with only `id` specified
+    - probably other stuff later
+- **not implemented**
+
+### `DELETE /tokens/:id`
+
+- for: revoking a token ("logging out")
+- arguments:
+    - `id`: the `id` of the token to revoke
+        - required
+- response: `200`, `404`, or `401`
+- **not implemented**
 
 ## Known clients
 
