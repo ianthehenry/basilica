@@ -45,6 +45,13 @@ instance Aeson.ToJSON Post where
                                   , "idParent" .= postParentID
                                   ]
 
+instance Aeson.ToJSON TokenRecord where
+  toJSON TokenRecord {..} = Aeson.object
+   [ "id" .= tokenID
+   , "token" .= tokenValue
+   , "idUser" .= tokenUserID
+   ]
+
 type ID = Int
 type Email = Text
 type Token = Text
