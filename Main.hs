@@ -1,11 +1,13 @@
 module Main where
 
 import           BasePrelude hiding (app)
+import           Control.Concurrent.Chan
 import           Control.Monad.Trans (liftIO)
 import           Data.ByteString (ByteString)
 import qualified Data.Configurator as Conf
 import           Data.Text.Lazy (Text)
 import           Database
+import           Mailer
 import           Network.HTTP.Types
 import           Network.Wai (Application)
 import qualified Network.Wai as Wai
@@ -18,16 +20,11 @@ import           Web.Scotty
 maybeParam :: Parsable a => Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
 
-emailCode :: Email -> CodeRecord -> IO ()
-emailCode email CodeRecord{..} = print $ mconcat [email, " - ", codeValue]
+emailForCode :: EmailAddress -> CodeRecord -> Email
+emailForCode to CodeRecord{..} = easyEmail to "Your Code" codeValue
 
-generateCode :: Database -> Email -> IO ()
-generateCode db email = do
-  code <- createCode db email
-  maybe (return ()) (emailCode email) code
-
-basilica :: Maybe ByteString -> Database -> IO Application
-basilica origin db = scottyApp $ do
+basilica :: Maybe ByteString -> Database -> Chan Email -> IO Application
+basilica origin db emailChan = scottyApp $ do
   case origin of
     Nothing -> return ()
     Just o -> middleware (addHeaders [("Access-Control-Allow-Origin", o)])
@@ -42,8 +39,10 @@ basilica origin db = scottyApp $ do
     with400 $ postPost (Just <$> param "id")
   post "/codes" $
     with400 $ do
-      email <- param "email"
-      liftIO (generateCode db email)
+      emailAddress <- param "email"
+      liftIO $ do
+        code <- createCode db emailAddress
+        maybe (return ()) (writeChan emailChan . emailForCode emailAddress) code
       status status200
   post "/tokens" $
     with400 $ do
@@ -72,8 +71,11 @@ main = do
   conf <- Conf.load [Conf.Required "conf"]
   port <- Conf.require conf "port"
   origin <- Conf.lookup conf "client-origin"
+  mailer <- newMailer <$> Conf.require conf "mandrill-key"
   db <- newDatabase =<< Conf.require conf "dbpath"
+  emailChan <- newChan
   server <- Sockets.newServer (dbPostChan db)
-  api <- basilica origin db
+  api <- basilica origin db emailChan
+  forkIO $ getChanContents emailChan >>= mapM_ (sendMail mailer)
   putStrLn $ "Running on port " ++ show port
   Warp.run port (websocketsOr defaultConnectionOptions server api)

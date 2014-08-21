@@ -3,7 +3,7 @@ module Types (
   CodeRecord(..),
   TokenRecord(..),
   User(..),
-  ID, Email,
+  ID, EmailAddress,
   Token, Code
 ) where
 
@@ -33,7 +33,7 @@ data TokenRecord = TokenRecord { tokenID :: ID
                                }
 
 data User = User { userID :: ID
-                 , userEmail :: Text
+                 , userEmail :: EmailAddress
                  }
 
 instance Aeson.ToJSON Post where
@@ -53,6 +53,6 @@ instance Aeson.ToJSON TokenRecord where
    ]
 
 type ID = Int
-type Email = Text
+type EmailAddress = Text
 type Token = Text
 type Code = Text

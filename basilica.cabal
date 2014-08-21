@@ -21,6 +21,7 @@ executable basilica
   -- other-extensions:
   build-depends:       timers
                      , base16-bytestring
+                     , wreq
                      , DRBG
                      , filepath
                      , configurator

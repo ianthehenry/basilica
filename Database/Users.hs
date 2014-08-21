@@ -4,11 +4,10 @@ module Database.Users (
   getUser
 ) where
 
-import           BasePrelude
-import           Data.Text (Text)
-import qualified Data.Text as Text
-import           Data.Time.Clock
-import           Database.Internal
+import BasePrelude
+import Data.Text (Text)
+import Data.Time.Clock
+import Database.Internal
 
 toUser :: [SqlValue] -> User
 toUser [idUser, email] =
@@ -16,7 +15,7 @@ toUser [idUser, email] =
        , userEmail = fromSql email
        }
 
-getUser :: Connection -> Email -> IO (Maybe User)
+getUser :: Connection -> EmailAddress -> IO (Maybe User)
 getUser conn email =
   listToMaybe <$> fmap toUser <$> quickQuery' conn query [toSql email]
   where query = "select * from users where email = ?"
@@ -36,7 +35,7 @@ insertCode conn CodeRecord{..} =
     args = [ toSql codeValue, toSql codeGeneratedAt
            , saneSql codeValid, toSql codeUserID ]
 
-createCode :: Database -> Email -> IO (Maybe CodeRecord)
+createCode :: Database -> EmailAddress -> IO (Maybe CodeRecord)
 createCode db@(Database{dbConn}) email =
   getUser dbConn email >>= maybe (return Nothing) (fmap Just . newCode)
   where
