@@ -1,11 +1,13 @@
 module Database (
   module X,
   newDatabase,
-  Database
+  Database(..)
 ) where
 
 import BasePrelude
 import Control.Concurrent.Chan (newChan)
+import Control.Concurrent.MVar
+import Crypto.Random.DRBG
 import Database.HDBC.Sqlite3 (connectSqlite3)
 import Database.Internal
 import Database.Posts as X
@@ -18,4 +20,9 @@ newDatabase path = do
   conn <- connectSqlite3 path
   runRaw conn "COMMIT; PRAGMA foreign_keys = ON; BEGIN TRANSACTION;"
   newPosts <- newChan
-  return (conn, newPosts)
+  rng <- newGenIO :: IO HashDRBG
+  rngSlot <- newMVar rng
+  return Database { dbConn = conn
+                  , dbPostChan = newPosts
+                  , dbRNG = rngSlot
+                  }

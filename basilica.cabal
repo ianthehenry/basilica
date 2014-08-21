@@ -20,6 +20,8 @@ executable basilica
   -- other-modules:
   -- other-extensions:
   build-depends:       timers
+                     , base16-bytestring
+                     , DRBG
                      , filepath
                      , configurator
                      , unix-time

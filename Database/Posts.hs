@@ -29,27 +29,28 @@ postQuery conn whereClause args = fmap toPost <$> quickQuery' conn query args
                         , whereClause
                         , "group by posts.id"
                         , "order by posts.id desc"
-                        , ";"
                         ]
 
 getPost :: Database -> ID -> IO (Maybe Post)
-getPost (conn, _) idPost = listToMaybe <$>
-  postQuery conn "where posts.id = ?" [toSql idPost]
+getPost Database{dbConn} idPost = listToMaybe <$>
+  postQuery dbConn "where posts.id = ?" [toSql idPost]
 
 postChildren :: Database -> ID -> IO [Post]
-postChildren (conn, _) idPost = postQuery conn "where posts.id_parent = ?" [toSql idPost]
+postChildren Database{dbConn} idPost =
+  postQuery dbConn "where posts.id_parent = ?" [toSql idPost]
 
 getPostsSince :: Database -> Maybe ID -> IO [Post]
-getPostsSince (conn, _) Nothing = postQuery conn "" []
-getPostsSince (conn, _) (Just idPost) = postQuery conn "where posts.id > ?" [toSql idPost]
+getPostsSince Database{dbConn} Nothing = postQuery dbConn "" []
+getPostsSince Database{dbConn} (Just idPost) =
+  postQuery dbConn "where posts.id > ?" [toSql idPost]
 
 insertPost :: Database -> Text -> Text -> Maybe ID -> UTCTime -> IO (Maybe Post)
-insertPost db@(conn, newPosts) by content idParent at =
-  insertRow conn query args >>= maybe (return Nothing) report
+insertPost db@(Database{dbConn, dbPostChan}) by content idParent at =
+  insertRow dbConn query args >>= maybe (return Nothing) report
   where
     report idPost = do
       post <- fromJust <$> getPost db idPost
-      writeChan newPosts post
+      writeChan dbPostChan post
       return (Just post)
     query = unlines [ "insert into posts"
                     , "(by, content, id_parent, at)"

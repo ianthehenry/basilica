@@ -72,8 +72,8 @@ main = do
   conf <- Conf.load [Conf.Required "conf"]
   port <- Conf.require conf "port"
   origin <- Conf.lookup conf "client-origin"
-  db@(_, newPosts) <- newDatabase =<< Conf.require conf "dbpath"
-  server <- Sockets.newServer newPosts
+  db <- newDatabase =<< Conf.require conf "dbpath"
+  server <- Sockets.newServer (dbPostChan db)
   api <- basilica origin db
   putStrLn $ "Running on port " ++ show port
   Warp.run port (websocketsOr defaultConnectionOptions server api)
