@@ -21,6 +21,10 @@ getUser conn email =
   listToMaybe <$> fmap toUser <$> quickQuery' conn query [toSql email]
   where query = "select * from users where email = ?"
 
+saneSql :: Bool -> SqlValue
+saneSql True = toSql (1 :: Int)
+saneSql False = toSql (0 :: Int)
+
 insertCode :: Connection -> CodeRecord -> IO ID
 insertCode conn CodeRecord{..} =
   fromJust <$> insertRow conn query args
@@ -30,7 +34,7 @@ insertCode conn CodeRecord{..} =
                     , "values (?, ?, ?, ?)"
                     ]
     args = [ toSql codeValue, toSql codeGeneratedAt
-           , toSql codeValid, toSql codeUserID ]
+           , saneSql codeValid, toSql codeUserID ]
 
 createCode :: Database -> Email -> IO (Maybe CodeRecord)
 createCode db@(Database{dbConn}) email =
