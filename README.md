@@ -144,12 +144,12 @@ This is similar to the "forgot my password" flow found in most apps, except that
 
 ### `POST /codes`
 
-- for: creating a new code, which can be used to obtain a `token`
+- for: creating a new code, which can be used to obtain a token
 - arguments:
     - `email`: the email address of the user for which you would like to create a code
 - response: this route will always return an empty response body with a `200` status code, regardless of whether `email` corresponds to a valid email address
     - a timing attack can absolutely be used to determine if the email corresponds to a valid account or not; knock yourself out
-- note: if the `email` corresponds to a `user`, this route has the side effect of emailing the user a `code` that can be used to redeem a `token`
+- note: if `email` matches a user account, this route has the side effect of emailing the user a code that can be used to redeem a token
 - **not implemented**
 
 ### `DELETE /codes/:code`
@@ -168,7 +168,7 @@ This is similar to the "forgot my password" flow found in most apps, except that
 - response:
     - if the code is valid, a JSON-encoded token
     - otherwise, `401`
-- side effect: invalidates the `code` specified
+- side effect: invalidates the code specified
 - **not implemented**
 
 ### `GET /tokens`
