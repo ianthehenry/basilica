@@ -2,3 +2,4 @@ port = 3000
 dbpath = "basilica.db"
 client-origin = "http://localhost:3333"
 mandrill-key = "asdf"
+client-url = "http://localhost:3333"
