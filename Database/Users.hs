@@ -15,10 +15,15 @@ toUser [idUser, email] =
        , userEmail = fromSql email
        }
 
-getUser :: Connection -> EmailAddress -> IO (Maybe User)
-getUser conn email =
+getUserByEmail :: Connection -> EmailAddress -> IO (Maybe User)
+getUserByEmail conn email =
   listToMaybe <$> fmap toUser <$> quickQuery' conn query [toSql email]
   where query = "select * from users where email = ?"
+
+getUser :: Database -> ID -> IO (Maybe User)
+getUser db idUser =
+  listToMaybe <$> fmap toUser <$> quickQuery' (dbConn db) query [toSql idUser]
+  where query = "select * from users where id = ?"
 
 saneSql :: Bool -> SqlValue
 saneSql True = toSql (1 :: Int)
@@ -37,7 +42,7 @@ insertCode conn CodeRecord{..} =
 
 createCode :: Database -> EmailAddress -> IO (Maybe CodeRecord)
 createCode db@(Database{dbConn}) email =
-  getUser dbConn email >>= maybe (return Nothing) (fmap Just . newCode)
+  getUserByEmail dbConn email >>= maybe (return Nothing) (fmap Just . newCode)
   where
     newCode user = do
       now <- getCurrentTime

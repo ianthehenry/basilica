@@ -46,7 +46,7 @@ basilica origin db emailChan = scottyApp $ do
     with400 $ do
       code <- param "code"
       token <- liftIO (createToken db code)
-      maybe (status status401) json token
+      maybe (status status401) (\t -> liftIO (withUser db t) >>= json) token
   where
     withPost f idPost = do
       liftIO $ print idPost
@@ -57,6 +57,11 @@ basilica origin db emailChan = scottyApp $ do
       maybePost <- liftIO =<< makePost <$> idParent <*> param "by" <*> param "content"
       maybe post404 json maybePost
     makePost idParent by content = createPost db by content idParent
+
+withUser :: Database -> TokenRecord -> IO (TokenRecord, User)
+withUser db token@TokenRecord{..} = do
+  user <- fromJust <$> getUser db tokenUserID
+  return (token, user)
 
 addHeaders :: ResponseHeaders -> Wai.Middleware
 addHeaders newHeaders app req respond = app req $ \response -> do

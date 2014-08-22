@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module Types (
   Post(..),
   CodeRecord(..),
@@ -7,11 +9,14 @@ module Types (
   Token, Code
 ) where
 
-import Data.Text (Text)
-import Data.Time.Clock (UTCTime)
+import           BasePrelude
+import qualified Crypto.Hash.MD5 as MD5
+import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
-import Data.Aeson ((.=))
-import BasePrelude
+import qualified Data.ByteString.Base16 as Hex
+import           Data.Text (Text)
+import qualified Data.Text.Encoding as Text
+import           Data.Time.Clock (UTCTime)
 
 data Post = Post { postID :: ID
                  , postBy :: Text
@@ -45,12 +50,23 @@ instance Aeson.ToJSON Post where
                                   , "idParent" .= postParentID
                                   ]
 
-instance Aeson.ToJSON TokenRecord where
-  toJSON TokenRecord {..} = Aeson.object
-   [ "id" .= tokenID
-   , "token" .= tokenValue
-   , "idUser" .= tokenUserID
-   ]
+gravatar :: Text -> Text
+gravatar = Text.decodeUtf8 . Hex.encode . MD5.hash . Text.encodeUtf8
+
+instance Aeson.ToJSON User where
+  toJSON User{..} = Aeson.object
+    [ "id" .= userID
+    , "username" .= ("anon" :: Text)
+    , "face" .= Aeson.object ["gravatar" .= gravatar userEmail]
+    ]
+
+instance Aeson.ToJSON (TokenRecord, User) where
+  toJSON (TokenRecord{..}, user) = Aeson.object
+    [ "id" .= tokenID
+    , "token" .= tokenValue
+    , "user" .= user
+    , "idUser" .= tokenUserID
+    ]
 
 type ID = Int
 type EmailAddress = Text

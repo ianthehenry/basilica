@@ -166,7 +166,7 @@ This is similar to the "forgot my password" flow found in most apps, except that
         - required
 - note: auth tokens don't do anything yet
 - response:
-    - if the code is valid, a JSON-encoded token
+    - if the code is valid, a JSON-encoded token with `idUser` resolved into `user`
     - otherwise, `401`
 - side effect: invalidates the code specified
 - **not implemented**
