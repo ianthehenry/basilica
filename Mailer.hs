@@ -29,8 +29,8 @@ easyEmail :: Text -> Text -> Text -> Email
 easyEmail to subject body =
   Email { emailTo = to
         , emailFromName = "Basilica"
-        , emailFromEmail = "ianthehenry@gmail.com"
-        , emailReplyTo = "ianthehenry@gmail.com"
+        , emailFromEmail = "ianthehenry+basilica@gmail.com"
+        , emailReplyTo = "ianthehenry+basilica@gmail.com"
         , emailSubject = subject
         , emailBody = body
         }
