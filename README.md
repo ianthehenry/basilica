@@ -37,14 +37,20 @@ There are no passwords. Authentication is done purely through email. The process
 
 This is similar to the "forgot my password" flow found in most apps, except that you don't have to pretend to remember anything.
 
-## Models
+## Resources
+
+Basilica defines a few resources, which are always communicated in JSON.
+
+Sometimes the API will send *resolved* data, which means that it will substitute something that looks like `"resource": { "id": 123, ... }` for something that the docs describe as `"idResource": 123`. When it does so will be documented in the route response.
+
+Unless otherwise specified, no value will be `null`.
 
 ### Post
 
 ```json
 { "id": 49
 , "idParent": 14
-, "by": "ian"
+, "idUser": 43
 , "at": "2014-08-17T01:19:15.139Z"
 , "count": 0
 , "content": "any string"
@@ -53,8 +59,8 @@ This is similar to the "forgot my password" flow found in most apps, except that
 ```
 
 - `id` is a monotonically increasing identifier, and *it is the only field that should be used for sorting posts*.
-- `idParent` *might be `null`*. Root posts have no parents.
-- `by` is currently just a string. Later it may be something else.
+- `idParent` *can be `null`*. Root posts have no parents.
+- `idUser` is the `id` of the user who created the post.
 - `at` is a string representing the date that the post was created, in ISO 8601 format. This field exists to be displayed to the user; it should not be used for sorting or paging. Use `id` for that.
 - `count` is the *total number of children that this post has*, regardless of the number of children returned in any response.
 - `children` is a list of posts whose `idParent` is equal to this post's `id`. This is *not necessarily an exhaustive list*. Comparing the number of elements in this field to the `count` field can tell you if there are more children to load.
@@ -65,15 +71,20 @@ This is similar to the "forgot my password" flow found in most apps, except that
 ```json
 { "id": 32
 , "email": "name@example.com"
+, "name": "ian"
 , "face": {}
 }
 ```
 
+- `email` will be omitted unless otherwise specified in the route documentation
 - `face` is an object that indicates how to render a thumbnail of the user. Currently the only valid options are:
     - `{ "gravatar": "a130ced3f36ffd4604f4dae04b2b3bcd" }`
     - `{ "string": "☃" }`
-    - **not implemented**
-- there'll be more fields later, probably
+        - **not implemented**
+
+### Code
+
+Codes are resources that exist and are referred to elsewhere in the documentation, but they will never be transmitted via JSON, so it doesn't make sense to show their format. You will always treat them as simple strings.
 
 ### Token
 
@@ -86,14 +97,14 @@ This is similar to the "forgot my password" flow found in most apps, except that
 
 ## Routes
 
+Basilica does not care for cookies or query parameters. For routes requiring authentication, add the `X-Token` request header with a value equal to the `token` field returned from `POST /tokens`.
+
 ### `POST /posts/:idParent`
 
+- **requires a valid `token`**
 - for: creating a new post as a child of the specified `idParent`
 - `idParent` is optional. If ommitted, this will create a post with `idParent` set to `null`.
 - arguments: an `x-www-form-urlencoded` body is expected with
-    - `by` (any string)
-        - required
-        - when accounts are implemented, this will be restricted
     - `content` (any string)
         - required
         - must not be the empty string
@@ -101,6 +112,14 @@ This is similar to the "forgot my password" flow found in most apps, except that
     - if the post has a `count` other than `0`, that's a bug
     - the post will not have `children`
 - note: eventually this will require a token and not take a `by` field, but that is **not implemented**
+
+####
+
+    $ curl -i # show response headers (otherwise a 401 is very confusing)
+           -X POST # set the HTTP verb
+           --data "content=hello%20world" # escape your string!
+           -H "X-Token: asdf" # requires authentication
+           "http://localhost:3000/posts"
 
 ### `GET /posts/:id`
 
@@ -145,12 +164,11 @@ This is similar to the "forgot my password" flow found in most apps, except that
 ### `POST /codes`
 
 - for: creating a new code, which can be used to obtain a token
-- arguments:
+- arguments: `x-www-form-urlencoded`
     - `email`: the email address of the user for which you would like to create a code
 - response: this route will always return an empty response body with a `200` status code, regardless of whether `email` corresponds to a valid email address
     - a timing attack can absolutely be used to determine if the email corresponds to a valid account or not; knock yourself out
-- note: if `email` matches a user account, this route has the side effect of emailing the user a code that can be used to redeem a token
-- **not implemented**
+- side effect: if the email address specified matches a user account, Basilica will send an email containing the newly created code.
 
 ### `DELETE /codes/:code`
 
@@ -161,7 +179,7 @@ This is similar to the "forgot my password" flow found in most apps, except that
 ### `POST /tokens`
 
 - for: creating a new token
-- arguments:
+- arguments: `x-www-form-urlencoded`
     - `code`: a code obtained from a call to `POST /codes`
         - required
 - note: auth tokens don't do anything yet
@@ -169,7 +187,6 @@ This is similar to the "forgot my password" flow found in most apps, except that
     - if the code is valid, a JSON-encoded token with `idUser` resolved into `user`
     - otherwise, `401`
 - side effect: invalidates the code specified
-- **not implemented**
 
 ### `GET /tokens`
 
@@ -187,9 +204,17 @@ This is similar to the "forgot my password" flow found in most apps, except that
 - response: `200`, `404`, or `401`
 - **not implemented**
 
+# Websockets
+
+There is currently one websocket route, a single firehose stream of all new posts created. The route is just `/`, with the `ws` or `wss` protocol.
+
+When connected, Basilica will periodically send ping frames. If the client doesn't respond in a timely manner, that client will be closed with either a friendly or slightly hostile message.
+
+Currently this is set to ping every 20 seconds and to disconnect clients if more than 40 seconds passes without receiving a pong. Don't rely on those values, though. Just pong the pings as quickly as you can. All websocket libraries should do this for you automatically.
+
 ## Known clients
 
-- [browser client](https://github.com/ianthehenry/basilica-client), nowhere near finished
+- [browser client](https://github.com/ianthehenry/basilica-client) that kinda works
 
 # Development
 
@@ -201,6 +226,10 @@ And install the dependencies.
 
     $ cabal install --only-dependencies -j
 
+Then modify the `conf` file. The `client-origin` field is totally optional.
+
 Then you can run it.
 
     $ cabal run
+
+Now you're ready to *basilicate*.
