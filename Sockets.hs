@@ -72,7 +72,7 @@ heartbeat db = do
     close (Client {clientConnection}) =
       WS.sendClose clientConnection ("pong better" :: ByteString)
 
-newServer :: Chan Post -> IO WS.ServerApp
+newServer :: Aeson.ToJSON a => Chan a -> IO WS.ServerApp
 newServer chan = do
   state <- newMVar newServerState
   repeatedTimer (heartbeat state) (sDelay heartbeatIntervalSeconds)
