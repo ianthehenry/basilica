@@ -77,7 +77,6 @@ instance Aeson.ToJSON (TokenRecord, User) where
     [ "id" .= tokenID
     , "token" .= tokenValue
     , "user" .= user
-    , "idUser" .= tokenUserID
     ]
 
 type ID = Int
