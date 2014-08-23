@@ -20,6 +20,7 @@ executable basilica
   -- other-modules:
   -- other-extensions:
   build-depends:       timers
+                     , random
                      , cryptohash
                      , base16-bytestring
                      , wreq

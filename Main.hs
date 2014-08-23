@@ -18,7 +18,9 @@ import qualified Network.Wai.Handler.Warp as Warp
 import           Network.Wai.Handler.WebSockets (websocketsOr)
 import           Network.WebSockets.Connection (defaultConnectionOptions)
 import qualified Sockets
+import           System.Random (getStdRandom, randomR)
 import           Web.Scotty
+
 
 maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
@@ -90,11 +92,26 @@ addHeaders newHeaders app req respond = app req $ \response -> do
   streamHandle $ \streamBody ->
     respond $ Wai.responseStream st (currentHeaders ++ newHeaders) streamBody
 
+randomSubject :: IO Strict.Text
+randomSubject = (subjects !!) <$> getStdRandom (randomR (0, length subjects - 1))
+  where subjects = [ "Hey Beautiful"
+                   , "Hey Baby"
+                   , "Hey Hon"
+                   , "Hey Honey"
+                   , "Hey Girl"
+                   , "Hey Sugarlips"
+                   , "Hey Darling"
+                   , "Hey Buttercup"
+                   , "Hey Honeyfingers"
+                   , "Hey Syruptoes"
+                   ]
+
 sendCodeMail :: Mailer -> Strict.Text -> (EmailAddress, CodeRecord) -> IO ()
-sendCodeMail mailer clientUrl (to, CodeRecord{codeValue}) =
-  sendMail mailer (easyEmail to "Basilica Code" messageBody)
+sendCodeMail mailer clientUrl (to, CodeRecord{codeValue}) = do
+  subject <- randomSubject
+  sendMail mailer (easyEmail to subject messageBody)
   where messageBody = Strict.intercalate "\n"
-                      [ "Here's your code:"
+                      [ "Here's your Basilicode:"
                       , ""
                       , codeValue
                       , ""
