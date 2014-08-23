@@ -39,6 +39,7 @@ data TokenRecord = TokenRecord { tokenID :: ID
                                }
 
 data User = User { userID :: ID
+                 , userName :: Text
                  , userEmail :: EmailAddress
                  }
 
@@ -60,7 +61,7 @@ gravatar = Text.decodeUtf8 . Hex.encode . MD5.hash . Text.encodeUtf8
 instance Aeson.ToJSON User where
   toJSON User{..} = Aeson.object
     [ "id" .= userID
-    , "username" .= ("anon" :: Text)
+    , "name" .= userName
     , "face" .= Aeson.object ["gravatar" .= gravatar userEmail]
     ]
 

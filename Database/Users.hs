@@ -11,8 +11,9 @@ import Data.Time.Clock
 import Database.Internal
 
 toUser :: [SqlValue] -> User
-toUser [idUser, email] =
+toUser [idUser, name, email] =
   User { userID = fromSql idUser
+       , userName = fromSql name
        , userEmail = fromSql email
        }
 
