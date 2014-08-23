@@ -13,13 +13,14 @@ import           BasePrelude
 import qualified Crypto.Hash.MD5 as MD5
 import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Base16 as Hex
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import           Data.Time.Clock (UTCTime)
 
 data Post = Post { postID :: ID
-                 , postBy :: Text
+                 , postUserID :: ID
                  , postContent :: Text
                  , postAt :: UTCTime
                  , postParentID :: Maybe ID
@@ -41,14 +42,17 @@ data User = User { userID :: ID
                  , userEmail :: EmailAddress
                  }
 
+postPairs :: Post -> [Aeson.Pair]
+postPairs Post{..} = [ "id" .= postID
+                     , "content" .= postContent
+                     , "at" .= postAt
+                     , "count" .= postCount
+                     , "idParent" .= postParentID
+                     ]
+
 instance Aeson.ToJSON Post where
-  toJSON Post {..} = Aeson.object [ "id" .= postID
-                                  , "content" .= postContent
-                                  , "by" .= postBy
-                                  , "at" .= postAt
-                                  , "count" .= postCount
-                                  , "idParent" .= postParentID
-                                  ]
+  toJSON post@(Post{..}) = Aeson.object
+    ("idUser" .= postUserID : postPairs post)
 
 gravatar :: Text -> Text
 gravatar = Text.decodeUtf8 . Hex.encode . MD5.hash . Text.encodeUtf8
@@ -59,6 +63,10 @@ instance Aeson.ToJSON User where
     , "username" .= ("anon" :: Text)
     , "face" .= Aeson.object ["gravatar" .= gravatar userEmail]
     ]
+
+instance Aeson.ToJSON (Post, User) where
+  toJSON (post@(Post{..}), user) = Aeson.object
+    ("user" .= user : postPairs post)
 
 instance Aeson.ToJSON (TokenRecord, User) where
   toJSON (TokenRecord{..}, user) = Aeson.object

@@ -1,10 +1,9 @@
 CREATE TABLE posts (
   id INTEGER PRIMARY KEY NOT NULL,
-  by TEXT NOT NULL,
+  id_user TEXT NOT NULL REFERENCES users(id),
   content TEXT NOT NULL,
-  id_parent INTEGER NULL,
-  at TEXT NOT NULL,
-  FOREIGN KEY(id_parent) REFERENCES posts(id)
+  id_parent INTEGER NULL REFERENCES posts(id),
+  at TEXT NOT NULL
 );
 
 CREATE TABLE users (

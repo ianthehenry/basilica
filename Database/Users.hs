@@ -1,7 +1,8 @@
 module Database.Users (
   createCode,
   createToken,
-  getUser
+  getUser,
+  getUserByToken
 ) where
 
 import BasePrelude
@@ -24,6 +25,14 @@ getUser :: Database -> ID -> IO (Maybe User)
 getUser db idUser =
   listToMaybe <$> fmap toUser <$> quickQuery' (dbConn db) query [toSql idUser]
   where query = "select * from users where id = ?"
+
+getUserByToken :: Database -> Token -> IO (Maybe User)
+getUserByToken db token = listToMaybe <$> fmap toUser <$> quickQuery' (dbConn db) query [toSql token]
+  where
+    query = unlines [ "select users.* from tokens"
+                    , "inner join users on tokens.id_user = users.id"
+                    , "where token = ?"
+                    ]
 
 saneSql :: Bool -> SqlValue
 saneSql True = toSql (1 :: Int)

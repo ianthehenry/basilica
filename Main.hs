@@ -2,11 +2,13 @@ module Main where
 
 import           BasePrelude hiding (app, intercalate)
 import           Control.Concurrent.Chan
+import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Trans (liftIO)
 import           Data.ByteString (ByteString)
 import qualified Data.Configurator as Conf
-import           Data.Text as Strict
-import           Data.Text.Lazy as Lazy
+import qualified Data.Text as Strict
+import qualified Data.Text.Encoding as Strict
+import qualified Data.Text.Lazy as Lazy
 import           Database
 import           Mailer
 import           Network.HTTP.Types
@@ -21,6 +23,16 @@ import           Web.Scotty
 maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
 
+getHeader :: HeaderName -> ActionM (Maybe Strict.Text)
+getHeader name = (listToMaybe . map (Strict.decodeUtf8 . snd)
+                  . filter ((== name) . fst) . Wai.requestHeaders) <$> request
+
+maybio :: (a -> IO (Maybe b)) -> Maybe a -> IO (Maybe b)
+maybio = maybe (return Nothing)
+
+lmio :: MonadIO m => (a -> IO (Maybe b)) -> Maybe a -> m (Maybe b)
+lmio f = liftIO . maybio f
+
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
 basilica origin db emailChan = scottyApp $ do
   case origin of
@@ -31,10 +43,9 @@ basilica origin db emailChan = scottyApp $ do
   get "/posts" $ do
     since <- maybeParam "after"
     liftIO (getPostsSince db since) >>= json
-  post "/posts" $
-    with400 $ postPost (return Nothing)
+  post "/posts" $ with400 $ postPost Nothing
   post "/posts/:id" $
-    with400 $ postPost (Just <$> param "id")
+    with400 $ (Just <$> param "id") >>= postPost
   post "/codes" $
     with400 $ do
       emailAddress <- param "email"
@@ -50,13 +61,18 @@ basilica origin db emailChan = scottyApp $ do
   where
     withPost f idPost = do
       liftIO $ print idPost
-      maybe post404 f =<< liftIO (getPost db idPost)
-    post404 = status status404 >> text "Post not found"
+      maybe (post404 idPost) f =<< liftIO (getPost db idPost)
+    post404 idPost = status status404 >> text (postMessage idPost)
+    postMessage idPost = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
     with400 a = rescue a (\msg -> status status400 >> text msg)
     postPost idParent = do
-      maybePost <- liftIO =<< makePost <$> idParent <*> param "by" <*> param "content"
-      maybe post404 json maybePost
-    makePost idParent by content = createPost db by content idParent
+      content <- param "content"
+      maybeUser <- lmio (getUserByToken db) =<< getHeader "X-Token"
+      case maybeUser of
+        Nothing -> status status401 >> text "invalid token"
+        Just user -> do
+          maybePost <- liftIO (createPost db user content idParent)
+          maybe (post404 idParent) json maybePost
 
 withUser :: Database -> TokenRecord -> IO (TokenRecord, User)
 withUser db token@TokenRecord{..} = do

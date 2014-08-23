@@ -12,11 +12,11 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import Database.Internal
 
 toPost :: [SqlValue] -> Post
-toPost [idPost, by, content, idParent, at, count] =
+toPost [idPost, idUser, content, idParent, at, count] =
   Post { postID = fromSql idPost
        , postContent = fromSql content
        , postAt = fromSql at
-       , postBy = fromSql by
+       , postUserID = fromSql idUser
        , postParentID = fromSql idParent
        , postCount = fromSql count
        }
@@ -44,8 +44,8 @@ getPostsSince Database{dbConn} Nothing = postQuery dbConn "" []
 getPostsSince Database{dbConn} (Just idPost) =
   postQuery dbConn "where posts.id > ?" [toSql idPost]
 
-insertPost :: Database -> Text -> Text -> Maybe ID -> UTCTime -> IO (Maybe Post)
-insertPost db@(Database{dbConn, dbPostChan}) by content idParent at =
+insertPost :: Database -> User -> Text -> Maybe ID -> UTCTime -> IO (Maybe Post)
+insertPost db@(Database{dbConn, dbPostChan}) User{userID = idUser} content idParent at =
   insertRow dbConn query args >>= maybe (return Nothing) report
   where
     report idPost = do
@@ -53,11 +53,11 @@ insertPost db@(Database{dbConn, dbPostChan}) by content idParent at =
       writeChan dbPostChan post
       return (Just post)
     query = unlines [ "insert into posts"
-                    , "(by, content, id_parent, at)"
+                    , "(id_user, content, id_parent, at)"
                     , "values (?, ?, ?, ?)"
                     ]
-    args = [toSql by, toSql content, toSql idParent, toSql at]
+    args = [toSql idUser, toSql content, toSql idParent, toSql at]
 
-createPost :: Database -> Text -> Text -> Maybe ID -> IO (Maybe Post)
-createPost db by content parentID =
-  insertPost db by content parentID =<< getCurrentTime
+createPost :: Database -> User -> Text -> Maybe ID -> IO (Maybe Post)
+createPost db user content parentID =
+  insertPost db user content parentID =<< getCurrentTime

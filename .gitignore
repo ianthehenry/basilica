@@ -2,3 +2,4 @@ dist/
 cabal.sandbox.config
 .cabal-sandbox/
 *.db
+do/
