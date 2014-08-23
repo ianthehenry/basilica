@@ -33,7 +33,9 @@ There are no passwords. Authentication is done purely through email. The process
 - request a code (see `POST /codes`)
 - Basilica emails it to you
 - you trade in the code for a token (see `POST /tokens`)
-- you use that token to authenticate all future requests (details to follow)
+- you use that token to authenticate all future requests (by setting the `X-Token` header)
+
+I'm gonna repeat that last thing because it's important: you need to set an `X-Token` header to make an authenticated request. No cookies, query parameters, nothing like that. That header is the only thing that counts.
 
 This is similar to the "forgot my password" flow found in most apps, except that you don't have to pretend to remember anything.
 
@@ -109,9 +111,9 @@ Basilica does not care for cookies or query parameters. For routes requiring aut
         - required
         - must not be the empty string
 - response: the newly created post, JSON-encoded
+    - `idUser` will be resolved
     - if the post has a `count` other than `0`, that's a bug
     - the post will not have `children`
-- note: eventually this will require a token and not take a `by` field, but that is **not implemented**
 
 ####
 
@@ -143,6 +145,7 @@ Basilica does not care for cookies or query parameters. For routes requiring aut
         - applies recursively, if multiple depths are ever supported
 - response: a JSON-encoded post
     - if `depth` is greater than `0`, it will include `children`
+    - `idUser` will be resolved for the root post and all children, recursively
     - remember that `count` is always the *total* number of children, regardless of the `limit`
 
 ### `GET /posts`
@@ -160,6 +163,7 @@ Basilica does not care for cookies or query parameters. For routes requiring aut
     - if `after` is specified, and there were more than `limit` posts to return, this returns... some error code. I'm not sure what though. `410`, maybe?
         - **not implemented**
     - otherwise, a JSON array of posts with no `children` fields, sorted by `id` from newest to oldest
+    - `idUser` will be resolved
 
 ### `POST /codes`
 
@@ -206,7 +210,7 @@ Basilica does not care for cookies or query parameters. For routes requiring aut
 
 # Websockets
 
-There is currently one websocket route, a single firehose stream of all new posts created. The route is just `/`, with the `ws` or `wss` protocol.
+There is currently one websocket route, a single firehose stream of all new posts created, with `idUser` resolved. The route is just `/`, with the `ws` or `wss` protocol.
 
 When connected, Basilica will periodically send ping frames. If the client doesn't respond in a timely manner, that client will be closed with either a friendly or slightly hostile message.
 
