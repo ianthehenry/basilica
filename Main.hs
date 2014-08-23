@@ -37,7 +37,11 @@ basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> I
 basilica origin db emailChan = scottyApp $ do
   case origin of
     Nothing -> return ()
-    Just o -> middleware (addHeaders [("Access-Control-Allow-Origin", o)])
+    Just o -> do
+      middleware (addHeaders [("Access-Control-Allow-Origin", o)])
+      addroute OPTIONS (function $ const $ Just []) $ do
+        setHeader "Access-Control-Allow-Headers" "X-Token"
+        status status200
   get "/posts/:id" $
     withPost json =<< param "id"
   get "/posts" $ do
