@@ -41,6 +41,7 @@ basilica origin db emailChan = scottyApp $ do
       middleware (addHeaders [("Access-Control-Allow-Origin", o)])
       addroute OPTIONS (function $ const $ Just []) $ do
         setHeader "Access-Control-Allow-Headers" "X-Token"
+        setHeader "Access-Control-Allow-Methods" "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         status status200
   get "/posts/:id" $
     withPost json =<< param "id"
