@@ -2,6 +2,7 @@ module Database.Users (
   createCode,
   createToken,
   getUser,
+  createUser,
   getUserByToken
 ) where
 
@@ -118,3 +119,15 @@ createToken db code = do
       if isCodeValidAt record now then
         Just <$> convertCodeToToken db record
       else return Nothing
+
+createUser :: Database -> EmailAddress -> Text -> IO (Maybe User)
+createUser Database{dbConn} email name = do
+  idUserMaybe <- insertRow dbConn query [toSql email, toSql name]
+  case idUserMaybe of
+    Nothing -> return Nothing
+    Just idUser -> return $ Just User { userID = idUser
+                                      , userEmail = email
+                                      , userName = name
+                                      }
+  where
+    query = "insert into users (email, name) values (?, ?)"

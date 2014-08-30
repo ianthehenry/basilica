@@ -65,6 +65,18 @@ basilica origin db emailChan = scottyApp $ do
       code <- param "code"
       token <- liftIO (createToken db code)
       maybe (status status401) (\t -> liftIO (withUser db t) >>= json) token
+  post "/users" $
+    with400 $ do
+      email <- param "email"
+      name <- param "name"
+      if isValidName name then do
+        user <- liftIO (createUser db email name)
+        when (isJust user) $ liftIO $ do
+           code <- fromJust <$> createCode db email
+           writeChan emailChan (email, code)
+        maybe (status status409) json user
+      else
+        status status400 >> text "invalid username"
   where
     withPost f idPost = do
       liftIO $ print idPost
@@ -72,6 +84,9 @@ basilica origin db emailChan = scottyApp $ do
     post404 idPost = status status404 >> text (postMessage idPost)
     postMessage idPost = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
     with400 a = rescue a (\msg -> status status400 >> text msg)
+    isValidName name = all isAlphaNum (Strict.unpack name)
+                       && (len >= 2) && (len < 20)
+      where len = Strict.length name
     postPost idParent = do
       content <- param "content"
       maybeUser <- lmio (getUserByToken db) =<< getHeader "X-Token"

@@ -38,8 +38,8 @@ insertRow rawConn query args = withTransaction rawConn $ \conn -> do
   else
     return Nothing
   where
-    tryInsert conn = catchJust isForeignKeyError
+    tryInsert conn = catchJust isConstraintError
       (run conn query args >> return True)
       (const $ return False)
-    isForeignKeyError SqlError{seNativeError = 19} = Just ()
-    isForeignKeyError _ = Nothing
+    isConstraintError SqlError{seNativeError = 19} = Just ()
+    isConstraintError _ = Nothing
