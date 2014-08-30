@@ -232,7 +232,7 @@ And install the dependencies.
 
 Then modify the `conf` file. The `client-origin` field is optional, and mainly useful for development, so that you can serve your client from something like [Brunch](http://brunch.io/). When specified, it will set the `Access-Control-Allow-Origin` header and respond to `OPTIONS` requests appropriately.
 
-Then you can run it.
+Then you basilican run it.
 
     $ cabal run
 
