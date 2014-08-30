@@ -22,28 +22,19 @@ Small bits and pieces might happen to work here and there, but such behavior sho
 
 # API
 
-Basilica exposes a simple CRUD API, and is designed to be easy for computers to speak to. There are a few models that it speaks, always in JSON:
-
-## Authentication
-
-There's a goofy hand-rolled auth scheme.
-
-There are no passwords. Authentication is done purely through email. The process looks this:
-
-- request a code (see `POST /codes`)
-- Basilica emails it to you
-- you trade in the code for a token (see `POST /tokens`)
-- you use that token to authenticate all future requests (by setting the `X-Token` header)
-
-I'm gonna repeat that last thing because it's important: you need to set an `X-Token` header to make an authenticated request. No cookies, query parameters, nothing like that. That header is the only thing that counts.
-
-This is similar to the "forgot my password" flow found in most apps, except that you don't have to pretend to remember anything.
-
 ## Resources
 
 Basilica defines a few resources, which are always communicated in JSON.
 
-Sometimes the API will send *resolved* data, which means that it will substitute something that looks like `"resource": { "id": 123, ... }` for something that the docs describe as `"idResource": 123`. When it does so will be documented in the route response.
+Sometimes the API will send *resolved* data, which means that it will turn:
+
+    "idResource": 123
+
+Into:
+
+    "resource": { "id": 123, ... }
+
+When it does so will be documented in the route response.
 
 Unless otherwise specified, no value will be `null`.
 
@@ -86,7 +77,7 @@ Unless otherwise specified, no value will be `null`.
 
 ### Code
 
-Codes are resources that exist and are referred to elsewhere in the documentation, but they will never be transmitted via JSON, so it doesn't make sense to show their format. You will always treat them as simple strings.
+Codes are never communicated via JSON, so it doesn't make sense to show their format. Publicly, they can be considered strings. They happen to currently be hexadecimal strings, but that's an implementation detail that may change.
 
 ### Token
 
@@ -97,9 +88,22 @@ Codes are resources that exist and are referred to elsewhere in the documentatio
 }
 ```
 
-## Routes
+## Authentication
 
-Basilica does not care for cookies or query parameters. For routes requiring authentication, add the `X-Token` request header with a value equal to the `token` field returned from `POST /tokens`.
+There's a goofy hand-rolled auth scheme.
+
+There are no passwords. Authentication is done purely through email. The process looks this:
+
+- request a code (see `POST /codes`)
+- Basilica emails it to you
+- you trade in the code for a token (see `POST /tokens`)
+- you use that token to authenticate all future requests (by setting the `X-Token` header)
+
+I'm gonna repeat that last thing because it's important: you need to set an `X-Token` header to make an authenticated request. No cookies, query parameters, nothing like that. That header is the only thing that counts.
+
+This is similar to the "forgot my password" flow found in most apps, except that you don't have to pretend to remember anything.
+
+## Routes
 
 ### `POST /posts/:idParent`
 
@@ -115,13 +119,13 @@ Basilica does not care for cookies or query parameters. For routes requiring aut
     - if the post has a `count` other than `0`, that's a bug
     - the post will not have `children`
 
-####
-
-    $ curl -i # show response headers (otherwise a 401 is very confusing)
-           -X POST # set the HTTP verb
-           --data "content=hello%20world" # escape your string!
-           -H "X-Token: asdf" # requires authentication
-           "http://localhost:3000/posts"
+```sh
+$ curl -i                             # show response headers (otherwise a 401 is very confusing)
+       -X POST                        # set the HTTP verb
+       --data "content=hello%20world" # escape your string!
+       -H "X-Token: asdf"             # requires authentication
+       "http://localhost:3000/posts"  # the actual route
+```
 
 ### `GET /posts/:id`
 
@@ -210,19 +214,24 @@ Basilica does not care for cookies or query parameters. For routes requiring aut
 
 # Websockets
 
-There is currently one websocket route, a single firehose stream of all new posts created, with `idUser` resolved. The route is just `/`, with the `ws` or `wss` protocol.
+There is currently one websocket route, a single firehose stream of all new posts created, in JSON, with `idUser` resolved. The route is just `/`, with the `ws` or `wss` protocol.
 
 When connected, Basilica will periodically send ping frames. If the client doesn't respond in a timely manner, that client will be closed with either a friendly or slightly hostile message.
 
 Currently this is set to ping every 20 seconds and to disconnect clients if more than 40 seconds passes without receiving a pong. Don't rely on those values, though. Just pong the pings as quickly as you can. All websocket libraries should do this for you automatically.
 
-## Known clients
+## Notes
 
-- [browser client](https://github.com/ianthehenry/basilica-client) that kinda works
+- When a new post is created, clients should update their cached `count` value for its parent. It's important that this value stays up-to-date for accurate paging.
+- When a disconnect occurs, and it will, reconnect the socket and then call `GET /posts?after=id`, where `id` is the latest post that you knew about. It's important that you reconnect the socket before filling the gap, otherwise any post created in the brief moment after the response and before the socket comes back will be lost.
+
+## Basiliclients
+
+- The official [browser client](https://github.com/ianthehenry/basilica-client), with some implemented features.
 
 # Development
 
-Right now it uses SQLite. You need to create the database.
+Basilica uses SQLite. You need to create the database.
 
     $ sqlite3 basilica.db ".read schema.sql"
 
