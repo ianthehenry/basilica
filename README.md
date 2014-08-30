@@ -18,7 +18,7 @@ F5 | websockets
 
 Basilica is still *remarkably unfinished*.
 
-Small bits and pieces might happen to work here and there, but such behavior should be considered unusual.
+Small bits and pieces might happen to work here and there, but such behavior should be considered exceptional.
 
 # API
 
@@ -105,7 +105,9 @@ This is similar to the "forgot my password" flow found in most apps, except that
 
 ## Routes
 
-### `POST /posts/:idParent`
+### Postal Routes
+
+#### `POST /posts/:idParent`
 
 - **requires a valid `token`**
 - for: creating a new post as a child of the specified `idParent`
@@ -127,7 +129,7 @@ $ curl -i                             # show response headers (otherwise a 401 i
        "http://localhost:3000/posts"  # the actual route
 ```
 
-### `GET /posts/:id`
+#### `GET /posts/:id`
 
 - for: loading posts and post children
 - arguments: query parameters
@@ -152,7 +154,7 @@ $ curl -i                             # show response headers (otherwise a 401 i
     - `idUser` will be resolved for the root post and all children, recursively
     - remember that `count` is always the *total* number of children, regardless of the `limit`
 
-### `GET /posts`
+#### `GET /posts`
 
 - for: loading every single post in the entire database, catching up after a disconnect (with `after`)
 - arguments: query parameters
@@ -169,7 +171,23 @@ $ curl -i                             # show response headers (otherwise a 401 i
     - otherwise, a JSON array of posts with no `children` fields, sorted by `id` from newest to oldest
     - `idUser` will be resolved
 
-### `POST /codes`
+### User Routes
+
+#### `POST /users`
+
+- for: signing up for a new account
+- arguments: `x-www-form-urlencoded`
+    - `email`: the email address for the user.
+    - `name`: the username. Must contain only alphanumeric characters.
+- response:
+    - `200` with the newly created `user`
+    - `400` if the username contains non-alphanumeric characters
+    - `409` if an account already exists with the specified username or email address, with no response body
+- side effect: automatically invokes `POST /codes` with the given email address
+
+### Auth Routes
+
+#### `POST /codes`
 
 - for: creating a new code, which can be used to obtain a token
 - arguments: `x-www-form-urlencoded`
@@ -178,13 +196,13 @@ $ curl -i                             # show response headers (otherwise a 401 i
     - a timing attack can absolutely be used to determine if the email corresponds to a valid account or not; knock yourself out
 - side effect: if the email address specified matches a user account, Basilica will send an email containing the newly created code.
 
-### `DELETE /codes/:code`
+#### `DELETE /codes/:code`
 
 - for: revoking a code, in case it was sent in error
 - **not implemented**
 - or documented
 
-### `POST /tokens`
+#### `POST /tokens`
 
 - for: creating a new token
 - arguments: `x-www-form-urlencoded`
@@ -196,14 +214,14 @@ $ curl -i                             # show response headers (otherwise a 401 i
     - otherwise, `401`
 - side effect: invalidates the code specified
 
-### `GET /tokens`
+#### `GET /tokens`
 
 - for: listing tokens
 - response: an array of JSON-encoded token objects with only `id` specified
     - probably other stuff later
 - **not implemented**
 
-### `DELETE /tokens/:id`
+#### `DELETE /tokens/:id`
 
 - for: revoking a token ("logging out")
 - arguments:
