@@ -19,34 +19,35 @@ executable basilica
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       timers
-                     , random
-                     , cryptohash
-                     , base16-bytestring
-                     , wreq
-                     , DRBG
-                     , filepath
-                     , configurator
-                     , unix-time
-                     , suspend
-                     , wai-websockets
-                     , base >=4.7 && <4.8
-                     , bytestring
-                     , transformers
-                     , uuid
-                     , websockets
+  build-depends:       DRBG
                      , HDBC >= 2.4.0.0
                      , HDBC-sqlite3 >= 2.3.3.0
-                     , scotty
-                     , wai
-                     , warp
                      , aeson
+                     , base >=4.7 && <4.8
                      , base-prelude
-                     , time
+                     , base16-bytestring
+                     , bytestring
+                     , configurator
                      , containers
-                     , text
-                     , mtl
+                     , cryptohash
+                     , filepath
                      , http-types
+                     , io-streams >= 1.1.4.6
+                     , mtl
+                     , random
+                     , scotty
+                     , suspend
+                     , text
+                     , time
+                     , timers
+                     , transformers
+                     , unix-time
+                     , uuid
+                     , wai
+                     , wai-websockets
+                     , warp
+                     , websockets
+                     , wreq
 
   default-extensions:  OverloadedStrings, NoImplicitPrelude, TupleSections, NamedFieldPuns, RecordWildCards
   -- hs-source-dirs:
