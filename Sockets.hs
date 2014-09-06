@@ -12,8 +12,6 @@ import qualified Data.Aeson as Aeson
 import           Data.ByteString.Lazy (ByteString)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.UUID (UUID)
-import           Data.UUID.V4 (nextRandom)
 import           Data.UnixTime (UnixTime, getUnixTime, secondsToUnixDiffTime, diffUnixTime)
 import qualified Network.HTTP.Types.URI as URI
 import qualified Network.WebSockets as WS
@@ -23,7 +21,7 @@ import           Types
 
 type Broadcaster = Post -> IO ()
 data Client =
-  Client { clientIdentifier :: UUID } deriving (Eq, Ord)
+  Client { clientIdentifier :: Unique } deriving (Eq, Ord)
 data Beat =
   Beat { beatLastTime :: UnixTime
        , beatConnection :: WS.Connection
@@ -95,7 +93,7 @@ handleMessages onPong conn = WS.receive conn >>= \msg ->
 
 application_ :: MVar ServerState -> WS.ServerApp
 application_ db pending = ifAccept pending $ \conn -> do
-  clientIdentifier <- nextRandom
+  clientIdentifier <- newUnique
   let client = Client { clientIdentifier }
   (`finally` (disconnect client)) $ do
     setTime client conn
