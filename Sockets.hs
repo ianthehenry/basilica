@@ -17,6 +17,8 @@ import           Data.UUID.V4 (nextRandom)
 import           Data.UnixTime (UnixTime, getUnixTime, secondsToUnixDiffTime, addUnixDiffTime)
 import qualified Network.HTTP.Types.URI as URI
 import qualified Network.WebSockets as WS
+import           System.IO.Streams.Attoparsec (ParseException)
+
 import           Types
 import           Utils
 
@@ -108,17 +110,26 @@ handleMessages onPong conn = WS.receive conn >>= \msg ->
       WS.Ping a  -> WS.send conn (WS.ControlMessage (WS.Pong a)) >> recurse
   where recurse = handleMessages onPong conn
 
+application_ :: MVar ServerState -> WS.ServerApp
+application_ db pending = ifAccept pending $ \client ->
+  (`finally` (disconnect client)) $ do
+    withState (return . addClient client)
+    handleMessages (updatePong client) (clientConnection client)
+  where
+    withState = modifyMVar_ db
+    setTime client state = do
+      now <- getUnixTime
+      -- because only the clientIdentifier matters,
+      -- this replaces the previous client
+      return $ Set.insert client{ clientLastPongTime = now } state
+    disconnect client = withState (return . removeClient client)
+    updatePong client = withState (setTime client)
+
 application :: MVar ServerState -> WS.ServerApp
 application db pending =
-  ifAccept pending $ \client ->
-    flip finally (disconnect client) $ do
-      modifyMVar_ db (return . addClient client)
-      handleMessages (updatePong client) (clientConnection client)
-    where
-      updatePong client = modifyMVar_ db (setTime client)
-      setTime client state = do
-        now <- getUnixTime
-        -- because only the clientIdentifier matters,
-        -- this replaces the previous client
-        return $ Set.insert client{ clientLastPongTime = now } state
-      disconnect client = modifyMVar_ db (return . removeClient client)
+  (handle connectionExceptions . handle parseExceptions) (application_ db pending)
+  where
+    parseExceptions =
+      const $ throw WS.ConnectionClosed :: ParseException -> IO ()
+    connectionExceptions =
+      const $ return () :: WS.ConnectionException -> IO ()
