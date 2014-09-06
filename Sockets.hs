@@ -8,6 +8,8 @@ import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar
 import           Control.Concurrent.Suspend (sDelay)
 import           Control.Concurrent.Timer
+import           Control.Monad.Trans (lift)
+import           Control.Monad.Trans.Maybe (runMaybeT)
 import qualified Data.Aeson as Aeson
 import           Data.ByteString.Lazy (ByteString)
 import           Data.Map (Map)
@@ -82,14 +84,16 @@ ifAccept pending callback =
     _ -> WS.rejectRequest pending "You can only connect to / right now."
 
 handleMessages :: IO () -> WS.Connection -> IO ()
-handleMessages onPong conn = WS.receive conn >>= \msg ->
+handleMessages onPong conn = void $ (runMaybeT . forever) $ do
+  msg <- lift $ WS.receive conn
   case msg of
     WS.DataMessage _     -> recurse
     WS.ControlMessage cm -> case cm of
-      WS.Close _ -> return ()
-      WS.Pong _  -> onPong >> recurse
-      WS.Ping a  -> WS.send conn (WS.ControlMessage (WS.Pong a)) >> recurse
-  where recurse = handleMessages onPong conn
+      WS.Close _ -> stop
+      WS.Pong _  -> lift onPong >> recurse
+      WS.Ping a  -> lift (WS.send conn (WS.ControlMessage (WS.Pong a))) >> recurse
+  where stop = mzero
+        recurse = return ()
 
 application_ :: MVar ServerState -> WS.ServerApp
 application_ db pending = ifAccept pending $ \conn -> do
