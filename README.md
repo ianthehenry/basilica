@@ -264,3 +264,8 @@ Then you basilican run it.
     $ cabal run
 
 Now you're ready to *basilicate*.
+
+## Contributors
+
+- [Ian](https://github.com/ianthehenry) started it
+- [Hao](https://github.com/hlian) made websockets shinier
