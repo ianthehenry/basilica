@@ -42,7 +42,6 @@ executable basilica
                      , timers
                      , transformers
                      , unix-time
-                     , uuid
                      , wai
                      , wai-websockets
                      , warp
