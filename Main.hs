@@ -8,6 +8,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.Configurator as Conf
 import qualified Data.Text as Strict
 import qualified Data.Text.Encoding as Strict
+import qualified Data.Text.IO as Text
 import qualified Data.Text.Lazy as Lazy
 import           Database
 import           Mailer
@@ -138,17 +139,22 @@ sendCodeMail mailer clientUrl (to, CodeRecord{codeValue}) = do
                       , "  Basilica"
                       ]
 
+logCode :: (EmailAddress, CodeRecord) -> IO ()
+logCode (to, CodeRecord{codeValue}) = Text.putStrLn (Strict.intercalate ": " [to, codeValue])
+
 main :: IO ()
 main = do
   conf <- Conf.load [Conf.Required "conf"]
   port <- Conf.require conf "port"
   origin <- Conf.lookup conf "client-origin"
-  mailer <- newMailer <$> Conf.require conf "mandrill-key"
-  clientUrl <- Conf.require conf "client-url"
+  mandrillKey <- Conf.lookup conf "mandrill-key"
+  mailHandler <- case mandrillKey of
+    Nothing -> return logCode
+    Just key -> sendCodeMail (newMailer key) <$> Conf.require conf "client-url"
   db <- newDatabase =<< Conf.require conf "dbpath"
   emailChan <- newChan
   server <- Sockets.newServer (dbPostChan db)
   api <- basilica origin db emailChan
-  forkIO $ getChanContents emailChan >>= mapM_ (sendCodeMail mailer clientUrl)
+  forkIO $ getChanContents emailChan >>= mapM_ mailHandler
   putStrLn $ "Running on port " ++ show port
   Warp.run port (websocketsOr defaultConnectionOptions server api)
