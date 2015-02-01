@@ -87,13 +87,11 @@ handleMessages :: IO () -> WS.Connection -> IO ()
 handleMessages onPong conn = void $ (runMaybeT . forever) $ do
   msg <- lift $ WS.receive conn
   case msg of
-    WS.DataMessage _     -> recurse
+    WS.DataMessage _     -> pure ()
     WS.ControlMessage cm -> case cm of
-      WS.Close _ -> stop
-      WS.Pong _  -> lift onPong >> recurse
-      WS.Ping a  -> lift (WS.send conn (WS.ControlMessage (WS.Pong a))) >> recurse
-  where stop = mzero
-        recurse = return ()
+      WS.Close _ _ -> mzero
+      WS.Pong _    -> lift onPong
+      WS.Ping a    -> lift (WS.send conn (WS.ControlMessage (WS.Pong a)))
 
 application_ :: MVar ServerState -> WS.ServerApp
 application_ db pending = ifAccept pending $ \conn -> do
