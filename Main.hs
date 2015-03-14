@@ -31,13 +31,13 @@ getHeader :: HeaderName -> ActionM (Maybe Strict.Text)
 getHeader name = (listToMaybe . map (Strict.decodeUtf8 . snd)
                   . filter ((== name) . fst) . Wai.requestHeaders) <$> request
 
-maybio :: (a -> IO (Maybe b)) -> Maybe a -> IO (Maybe b)
-maybio = maybe (return Nothing)
+maybDB :: (a -> DatabaseM (Maybe b)) -> Maybe a -> DatabaseM (Maybe b)
+maybDB = maybe (return Nothing)
 
-lmio :: MonadIO m => (a -> IO (Maybe b)) -> Maybe a -> m (Maybe b)
-lmio f = liftIO . maybio f
+lmdb :: MonadIO m => Database -> (a -> DatabaseM (Maybe b)) -> Maybe a -> m (Maybe b)
+lmdb db f = liftDB db . maybDB f
 
-liftDB :: Database -> DatabaseM a -> ActionM a
+liftDB :: MonadIO m => Database -> DatabaseM a -> m a
 liftDB db inner = liftIO $ (runReaderT inner) db
 
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
@@ -61,24 +61,24 @@ basilica origin db emailChan = scottyApp $ do
   post "/codes" $
     with400 $ do
       emailAddress <- param "email"
-      liftIO $ do
-        code <- createCode db emailAddress
-        maybe (return ()) (writeChan emailChan . (emailAddress, )) code
+      liftDB db $ do
+        code <- createCode emailAddress
+        maybe (return ()) (liftIO . writeChan emailChan . (emailAddress,)) code
       status status200
   post "/tokens" $
     with400 $ do
       code <- param "code"
-      token <- liftIO (createToken db code)
-      maybe (status status401) (\t -> liftIO (withUser db t) >>= json) token
+      token <- liftDB db (createToken code)
+      maybe (status status401) (\t -> liftDB db (withUser t) >>= json) token
   post "/users" $
     with400 $ do
       email <- param "email"
       name <- param "name"
       if isValidName name then do
-        user <- liftIO (createUser db email name)
-        when (isJust user) $ liftIO $ do
-           code <- fromJust <$> createCode db email
-           writeChan emailChan (email, code)
+        user <- liftDB db (createUser email name)
+        when (isJust user) $ liftDB db $ do
+           code <- fromJust <$> createCode email
+           liftIO $ writeChan emailChan (email, code)
         maybe (status status409) json user
       else
         status status400 >> text "invalid username"
@@ -94,16 +94,16 @@ basilica origin db emailChan = scottyApp $ do
       where len = Strict.length name
     postPost idParent = do
       content <- param "content"
-      maybeUser <- lmio (getUserByToken db) =<< getHeader "X-Token"
+      maybeUser <- lmdb db getUserByToken =<< getHeader "X-Token"
       case maybeUser of
         Nothing -> status status401 >> text "invalid token"
         Just user -> do
           maybePost <- liftDB db (createPost user content idParent)
           maybe (post404 idParent) json maybePost
 
-withUser :: Database -> TokenRecord -> IO (TokenRecord, User)
-withUser db token@TokenRecord{..} = do
-  user <- fromJust <$> getUser db tokenUserID
+withUser :: TokenRecord -> DatabaseM (TokenRecord, User)
+withUser token@TokenRecord{..} = do
+  user <- fromJust <$> getUser tokenUserID
   return (token, user)
 
 addHeaders :: ResponseHeaders -> Wai.Middleware
