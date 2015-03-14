@@ -7,6 +7,7 @@ module Database.Posts (
 
 import BasePrelude
 import Control.Concurrent.Chan
+import Control.Monad.Reader (liftIO, ask)
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Database.Internal
@@ -50,13 +51,14 @@ getPostsSince Database{dbConn} Nothing = postQuery dbConn "" []
 getPostsSince Database{dbConn} (Just idPost) =
   postQuery dbConn "where posts.id > ?" [toSql idPost]
 
-insertPost :: Database -> User -> Text -> Maybe ID -> UTCTime -> IO (Maybe ResolvedPost)
-insertPost db@(Database{dbConn, dbPostChan}) User{userID = idUser} content idParent at =
-  insertRow dbConn query args >>= maybe (return Nothing) report
+insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
+insertPost User{userID = idUser} content idParent at = do
+  db <- ask
+  liftIO $ insertRow (dbConn db) query args >>= maybe (return Nothing) (report db)
   where
-    report idPost = do
+    report db idPost = do
       post <- fromJust <$> getPost db idPost
-      writeChan dbPostChan post
+      writeChan (dbPostChan db) post
       return (Just post)
     query = unlines [ "insert into posts"
                     , "(id_user, content, id_parent, at)"
@@ -64,6 +66,6 @@ insertPost db@(Database{dbConn, dbPostChan}) User{userID = idUser} content idPar
                     ]
     args = [toSql idUser, toSql content, toSql idParent, toSql at]
 
-createPost :: Database -> User -> Text -> Maybe ID -> IO (Maybe ResolvedPost)
-createPost db user content parentID =
-  insertPost db user content parentID =<< getCurrentTime
+createPost :: User -> Text -> Maybe ID -> DatabaseM (Maybe ResolvedPost)
+createPost user content parentID =
+  insertPost user content parentID =<< (liftIO getCurrentTime)

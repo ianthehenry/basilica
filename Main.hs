@@ -4,6 +4,7 @@ import           BasePrelude hiding (app, intercalate)
 import           Control.Concurrent.Chan
 import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Trans (liftIO)
+import           Control.Monad.Reader (runReaderT)
 import           Data.ByteString (ByteString)
 import qualified Data.Configurator as Conf
 import qualified Data.Text as Strict
@@ -94,7 +95,7 @@ basilica origin db emailChan = scottyApp $ do
       case maybeUser of
         Nothing -> status status401 >> text "invalid token"
         Just user -> do
-          maybePost <- liftIO (createPost db user content idParent)
+          maybePost <- liftIO $ runReaderT (createPost user content idParent) db
           maybe (post404 idParent) json maybePost
 
 withUser :: Database -> TokenRecord -> IO (TokenRecord, User)

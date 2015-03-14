@@ -2,6 +2,7 @@ module Database.Internal (
   module X,
   Connection,
   Database(..),
+  DatabaseM,
   secureRandom,
   insertRow
 ) where
@@ -9,6 +10,7 @@ module Database.Internal (
 import           BasePrelude
 import           Control.Concurrent.Chan (Chan)
 import           Control.Concurrent.MVar
+import           Control.Monad.Reader (ReaderT, liftIO, ask)
 import           Crypto.Random.DRBG (genBytes, HashDRBG)
 import           Data.ByteString.Base16 as BS (encode)
 import           Data.Text (Text)
@@ -22,6 +24,8 @@ data Database = Database { dbConn :: Connection
                          , dbPostChan :: Chan ResolvedPost
                          , dbRNG :: MVar HashDRBG
                          }
+
+type DatabaseM a = ReaderT Database IO a
 
 secureRandom :: Database -> IO Text
 secureRandom Database {dbRNG} = do
