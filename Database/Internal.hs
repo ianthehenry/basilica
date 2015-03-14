@@ -32,7 +32,7 @@ type DatabaseM a = ReaderT Database IO a
 runQuery :: String -> [SqlValue] -> DatabaseM [[SqlValue]]
 runQuery query args = do
   Database{dbConn} <- ask
-  liftIO $ quickQuery' dbConn query args
+  liftIO (quickQuery' dbConn query args)
 
 secureRandom :: Database -> IO Text
 secureRandom Database {dbRNG} = do
