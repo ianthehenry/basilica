@@ -37,6 +37,9 @@ maybio = maybe (return Nothing)
 lmio :: MonadIO m => (a -> IO (Maybe b)) -> Maybe a -> m (Maybe b)
 lmio f = liftIO . maybio f
 
+liftDB :: Database -> DatabaseM a -> ActionM a
+liftDB db inner = liftIO $ (runReaderT inner) db
+
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
 basilica origin db emailChan = scottyApp $ do
   case origin of
@@ -51,7 +54,7 @@ basilica origin db emailChan = scottyApp $ do
     withPost json =<< param "id"
   get "/posts" $ do
     since <- maybeParam "after"
-    liftIO (getPostsSince db since) >>= json
+    liftDB db (getPostsSince since) >>= json
   post "/posts" $ with400 $ postPost Nothing
   post "/posts/:id" $
     with400 $ (Just <$> param "id") >>= postPost
@@ -82,7 +85,7 @@ basilica origin db emailChan = scottyApp $ do
   where
     withPost f idPost = do
       liftIO $ print idPost
-      maybe (post404 idPost) f =<< liftIO (getPost db idPost)
+      maybe (post404 idPost) f =<< liftDB db (getPost idPost)
     post404 idPost = status status404 >> text (postMessage idPost)
     postMessage idPost = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
     with400 a = rescue a (\msg -> status status400 >> text msg)
@@ -95,7 +98,7 @@ basilica origin db emailChan = scottyApp $ do
       case maybeUser of
         Nothing -> status status401 >> text "invalid token"
         Just user -> do
-          maybePost <- liftIO $ runReaderT (createPost user content idParent) db
+          maybePost <- liftDB db (createPost user content idParent)
           maybe (post404 idParent) json maybePost
 
 withUser :: Database -> TokenRecord -> IO (TokenRecord, User)

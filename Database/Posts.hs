@@ -27,8 +27,10 @@ toPost [idPost, idUser, content, idParent, at, count, _, name, email] =
          }
   )
 
-postQuery :: Connection -> String -> [SqlValue] -> IO [ResolvedPost]
-postQuery conn whereClause args = fmap toPost <$> quickQuery' conn query args
+postQuery :: String -> [SqlValue] -> DatabaseM [ResolvedPost]
+postQuery whereClause args = do
+  Database{dbConn} <- ask
+  fmap toPost <$> (liftIO $ quickQuery' dbConn query args)
   where query = unlines [ "select posts.*, count(children.id), users.* from posts"
                         , "left outer join posts as children"
                         , "  on children.id_parent = posts.id"
@@ -38,27 +40,27 @@ postQuery conn whereClause args = fmap toPost <$> quickQuery' conn query args
                         , "order by posts.id desc"
                         ]
 
-getPost :: Database -> ID -> IO (Maybe ResolvedPost)
-getPost Database{dbConn} idPost = listToMaybe <$>
-  postQuery dbConn "where posts.id = ?" [toSql idPost]
+getPost :: ID -> DatabaseM (Maybe ResolvedPost)
+getPost idPost = listToMaybe <$>
+  postQuery "where posts.id = ?" [toSql idPost]
 
-postChildren :: Database -> ID -> IO [ResolvedPost]
-postChildren Database{dbConn} idPost =
-  postQuery dbConn "where posts.id_parent = ?" [toSql idPost]
+postChildren :: ID -> DatabaseM [ResolvedPost]
+postChildren idPost =
+  postQuery "where posts.id_parent = ?" [toSql idPost]
 
-getPostsSince :: Database -> Maybe ID -> IO [ResolvedPost]
-getPostsSince Database{dbConn} Nothing = postQuery dbConn "" []
-getPostsSince Database{dbConn} (Just idPost) =
-  postQuery dbConn "where posts.id > ?" [toSql idPost]
+getPostsSince :: Maybe ID -> DatabaseM [ResolvedPost]
+getPostsSince Nothing = postQuery "" []
+getPostsSince (Just idPost) =
+  postQuery "where posts.id > ?" [toSql idPost]
 
 insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
 insertPost User{userID = idUser} content idParent at = do
   db <- ask
-  liftIO $ insertRow (dbConn db) query args >>= maybe (return Nothing) (report db)
+  (liftIO $ insertRow (dbConn db) query args) >>= maybe (return Nothing) (report db)
   where
     report db idPost = do
-      post <- fromJust <$> getPost db idPost
-      writeChan (dbPostChan db) post
+      post <- fromJust <$> getPost idPost
+      liftIO $ writeChan (dbPostChan db) post
       return (Just post)
     query = unlines [ "insert into posts"
                     , "(id_user, content, id_parent, at)"
