@@ -28,9 +28,7 @@ toPost [idPost, idUser, content, idParent, at, count, _, name, email] =
   )
 
 postQuery :: String -> [SqlValue] -> DatabaseM [ResolvedPost]
-postQuery whereClause args = do
-  Database{dbConn} <- ask
-  fmap toPost <$> (liftIO $ quickQuery' dbConn query args)
+postQuery whereClause args = fmap toPost <$> runQuery query args
   where query = unlines [ "select posts.*, count(children.id), users.* from posts"
                         , "left outer join posts as children"
                         , "  on children.id_parent = posts.id"
@@ -54,11 +52,11 @@ getPostsSince (Just idPost) =
   postQuery "where posts.id > ?" [toSql idPost]
 
 insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
-insertPost User{userID = idUser} content idParent at = do
-  db <- ask
-  (liftIO $ insertRow (dbConn db) query args) >>= maybe (return Nothing) (report db)
+insertPost User{userID = idUser} content idParent at =
+  insertRow query args >>= maybe (return Nothing) report
   where
-    report db idPost = do
+    report idPost = do
+      db <- ask
       post <- fromJust <$> getPost idPost
       liftIO $ writeChan (dbPostChan db) post
       return (Just post)

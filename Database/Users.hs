@@ -7,6 +7,7 @@ module Database.Users (
 ) where
 
 import BasePrelude
+import Control.Monad.Reader (liftIO, ask)
 import Data.Text (Text)
 import Data.Time.Clock
 import Database.Internal
@@ -18,18 +19,18 @@ toUser [idUser, name, email] =
        , userEmail = fromSql email
        }
 
-getUserByEmail :: Connection -> EmailAddress -> IO (Maybe User)
-getUserByEmail conn email =
-  listToMaybe <$> fmap toUser <$> quickQuery' conn query [toSql email]
+getUserByEmail :: EmailAddress -> DatabaseM (Maybe User)
+getUserByEmail email = do
+  listToMaybe <$> fmap toUser <$> runQuery query [toSql email]
   where query = "select * from users where email = ?"
 
-getUser :: Database -> ID -> IO (Maybe User)
-getUser db idUser =
-  listToMaybe <$> fmap toUser <$> quickQuery' (dbConn db) query [toSql idUser]
+getUser :: ID -> DatabaseM (Maybe User)
+getUser idUser =
+  listToMaybe <$> fmap toUser <$> runQuery query [toSql idUser]
   where query = "select * from users where id = ?"
 
-getUserByToken :: Database -> Token -> IO (Maybe User)
-getUserByToken db token = listToMaybe <$> fmap toUser <$> quickQuery' (dbConn db) query [toSql token]
+getUserByToken :: Token -> DatabaseM (Maybe User)
+getUserByToken token = listToMaybe <$> fmap toUser <$> runQuery query [toSql token]
   where
     query = unlines [ "select users.* from tokens"
                     , "inner join users on tokens.id_user = users.id"
@@ -40,9 +41,9 @@ saneSql :: Bool -> SqlValue
 saneSql True = toSql (1 :: Int)
 saneSql False = toSql (0 :: Int)
 
-insertCode :: Connection -> CodeRecord -> IO ID
-insertCode conn CodeRecord{..} =
-  fromJust <$> insertRow conn query args
+insertCode :: CodeRecord -> DatabaseM ID
+insertCode CodeRecord{..} =
+  fromJust <$> insertRow query args
   where
     query = unlines [ "insert into codes"
                     , "(code, generated_at, valid, id_user)"
@@ -51,19 +52,20 @@ insertCode conn CodeRecord{..} =
     args = [ toSql codeValue, toSql codeGeneratedAt
            , saneSql codeValid, toSql codeUserID ]
 
-createCode :: Database -> EmailAddress -> IO (Maybe CodeRecord)
-createCode db@(Database{dbConn}) email =
-  getUserByEmail dbConn email >>= maybe (return Nothing) (fmap Just . newCode)
+createCode :: EmailAddress -> DatabaseM (Maybe CodeRecord)
+createCode email =
+  getUserByEmail email >>= maybe (return Nothing) (fmap Just . newCode)
   where
     newCode user = do
-      now <- getCurrentTime
-      codeValue <- secureRandom db
+      db <- ask
+      now <- liftIO getCurrentTime
+      codeValue <- liftIO (secureRandom db)
       let code = CodeRecord { codeValue = codeValue
                             , codeGeneratedAt = now
                             , codeValid = True
                             , codeUserID = userID user
                             }
-      insertCode dbConn code
+      insertCode code
       return code
 
 isCodeValidAt :: CodeRecord -> UTCTime -> Bool
@@ -80,14 +82,14 @@ toCodeRecord [code, at, valid, idUser] =
              , codeUserID = fromSql idUser
              }
 
-findCode :: Connection -> Code -> IO (Maybe CodeRecord)
-findCode conn code =
-  listToMaybe <$> fmap toCodeRecord <$> quickQuery' conn query [toSql code]
+findCode :: Code -> DatabaseM (Maybe CodeRecord)
+findCode code =
+  listToMaybe <$> fmap toCodeRecord <$> runQuery query [toSql code]
   where query = "select * from codes where code = ?"
 
 insertToken :: Connection -> Text -> CodeRecord -> IO TokenRecord
 insertToken conn token CodeRecord{..} = do
-  idToken <- fromJust <$> insertRow conn query [toSql token, toSql codeUserID]
+  idToken <- fromJust <$> insertRowRaw conn query [toSql token, toSql codeUserID]
   return TokenRecord { tokenID = idToken
                      , tokenValue = token
                      , tokenUserID = codeUserID
@@ -103,26 +105,28 @@ invalidateCode conn CodeRecord{codeValue} = do
     query = "update codes set valid = 0 where code = ?"
     args = [toSql codeValue]
 
-convertCodeToToken :: Database -> CodeRecord -> IO TokenRecord
-convertCodeToToken db code = withTransaction (dbConn db) $ \conn -> do
-  invalidateCode conn code
-  token <- secureRandom db
-  insertToken conn token code
+convertCodeToToken :: CodeRecord -> DatabaseM TokenRecord
+convertCodeToToken code = do
+  db <- ask
+  liftIO $ withTransaction (dbConn db) $ \conn -> do
+    invalidateCode conn code
+    token <- secureRandom db
+    insertToken conn token code
 
-createToken :: Database -> Code -> IO (Maybe TokenRecord)
-createToken db code = do
-  maybeCode <- findCode (dbConn db) code
+createToken :: Code -> DatabaseM (Maybe TokenRecord)
+createToken code = do
+  maybeCode <- findCode code
   case maybeCode of
     Nothing -> return Nothing
     Just record -> do
-      now <- getCurrentTime
+      now <- liftIO getCurrentTime
       if isCodeValidAt record now then
-        Just <$> convertCodeToToken db record
+        Just <$> convertCodeToToken record
       else return Nothing
 
-createUser :: Database -> EmailAddress -> Text -> IO (Maybe User)
-createUser Database{dbConn} email name = do
-  idUserMaybe <- insertRow dbConn query [toSql email, toSql name]
+createUser :: EmailAddress -> Text -> DatabaseM (Maybe User)
+createUser email name = do
+  idUserMaybe <- insertRow query [toSql email, toSql name]
   case idUserMaybe of
     Nothing -> return Nothing
     Just idUser -> return $ Just User { userID = idUser
