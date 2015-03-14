@@ -68,4 +68,4 @@ insertPost User{userID = idUser} content idParent at =
 
 createPost :: User -> Text -> Maybe ID -> DatabaseM (Maybe ResolvedPost)
 createPost user content parentID =
-  insertPost user content parentID =<< (liftIO getCurrentTime)
+  insertPost user content parentID =<< liftIO getCurrentTime
