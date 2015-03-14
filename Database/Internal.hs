@@ -2,13 +2,17 @@ module Database.Internal (
   module X,
   Connection,
   Database(..),
+  DatabaseM,
   secureRandom,
-  insertRow
+  runQuery,
+  insertRow,
+  insertRowRaw
 ) where
 
 import           BasePrelude
 import           Control.Concurrent.Chan (Chan)
 import           Control.Concurrent.MVar
+import           Control.Monad.Reader (ReaderT, liftIO, ask)
 import           Crypto.Random.DRBG (genBytes, HashDRBG)
 import           Data.ByteString.Base16 as BS (encode)
 import           Data.Text (Text)
@@ -23,6 +27,13 @@ data Database = Database { dbConn :: Connection
                          , dbRNG :: MVar HashDRBG
                          }
 
+type DatabaseM a = ReaderT Database IO a
+
+runQuery :: String -> [SqlValue] -> DatabaseM [[SqlValue]]
+runQuery query args = do
+  Database{dbConn} <- ask
+  liftIO (quickQuery' dbConn query args)
+
 secureRandom :: Database -> IO Text
 secureRandom Database {dbRNG} = do
   bytes <- modifyMVar dbRNG $ \gen ->
@@ -30,8 +41,13 @@ secureRandom Database {dbRNG} = do
       return (newGen, randomBytes)
   return $ (Text.decodeUtf8 . BS.encode) bytes
 
-insertRow :: Connection -> String -> [SqlValue] -> IO (Maybe ID)
-insertRow rawConn query args = withTransaction rawConn $ \conn -> do
+insertRow :: String -> [SqlValue] -> DatabaseM (Maybe ID)
+insertRow query args = do
+  Database{dbConn} <- ask
+  liftIO (insertRowRaw dbConn query args)
+
+insertRowRaw :: Connection -> String -> [SqlValue] -> IO (Maybe ID)
+insertRowRaw rawConn query args = withTransaction rawConn $ \conn -> do
   inserted <- tryInsert conn
   if inserted then
     (Just . fromSql . head . head) <$> quickQuery' conn "select last_insert_rowid()" []
