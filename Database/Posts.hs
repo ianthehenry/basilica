@@ -6,7 +6,6 @@ module Database.Posts (
 ) where
 
 import BasePrelude
-import Control.Concurrent.Chan
 import Control.Monad.Reader (liftIO, ask)
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)

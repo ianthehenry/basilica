@@ -4,8 +4,6 @@ module Sockets (
 ) where
 
 import           BasePrelude hiding ((\\))
-import           Control.Concurrent.Chan
-import           Control.Concurrent.MVar
 import           Control.Concurrent.Suspend (sDelay)
 import           Control.Concurrent.Timer
 import           Control.Monad.Trans (lift)
@@ -53,9 +51,8 @@ heartbeatIntervalSeconds :: Int64
 heartbeatIntervalSeconds = 20
 
 heartbeat :: MVar ServerState -> IO ()
-heartbeat db = do
-  modifyMVar_ db $ \state ->
-    Map.fromList <$> (filterM predicate $ Map.toList state)
+heartbeat db = modifyMVar_ db $ \state ->
+  Map.fromList <$> filterM predicate (Map.toList state)
   where
     maximumDelta =
       secondsToUnixDiffTime (heartbeatIntervalSeconds * 2)
@@ -97,7 +94,7 @@ application_ :: MVar ServerState -> WS.ServerApp
 application_ db pending = ifAccept pending $ \conn -> do
   clientIdentifier <- newUnique
   let client = Client { clientIdentifier }
-  (`finally` (disconnect client)) $ do
+  (`finally` disconnect client) $ do
     setTime client conn
     handleMessages (setTime client conn) conn
   where

@@ -1,7 +1,6 @@
 module Main where
 
 import           BasePrelude hiding (app, intercalate)
-import           Control.Concurrent.Chan
 import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Trans (liftIO)
 import           Control.Monad.Reader (runReaderT)
@@ -38,7 +37,7 @@ lmdb :: MonadIO m => Database -> (a -> DatabaseM (Maybe b)) -> Maybe a -> m (May
 lmdb db f = liftDB db . maybDB f
 
 liftDB :: MonadIO m => Database -> DatabaseM a -> m a
-liftDB db inner = liftIO $ (runReaderT inner) db
+liftDB db inner = liftIO (runReaderT inner db)
 
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
 basilica origin db emailChan = scottyApp $ do

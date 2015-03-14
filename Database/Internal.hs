@@ -10,8 +10,6 @@ module Database.Internal (
 ) where
 
 import           BasePrelude
-import           Control.Concurrent.Chan (Chan)
-import           Control.Concurrent.MVar
 import           Control.Monad.Reader (ReaderT, liftIO, ask)
 import           Crypto.Random.DRBG (genBytes, HashDRBG)
 import           Data.ByteString.Base16 as BS (encode)

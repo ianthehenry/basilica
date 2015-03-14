@@ -6,14 +6,11 @@ module Database (
 ) where
 
 import BasePrelude
-import Control.Concurrent.Chan (newChan)
-import Control.Concurrent.MVar
 import Crypto.Random.DRBG
 import Database.HDBC.Sqlite3 (connectSqlite3)
 import Database.Internal
 import Database.Posts as X
 import Database.Users as X
-import System.FilePath
 import Types as X
 
 newDatabase :: FilePath -> IO Database
