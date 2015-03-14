@@ -20,7 +20,7 @@ toUser [idUser, name, email] =
        }
 
 getUserByEmail :: EmailAddress -> DatabaseM (Maybe User)
-getUserByEmail email = do
+getUserByEmail email =
   listToMaybe <$> fmap toUser <$> runQuery query [toSql email]
   where query = "select * from users where email = ?"
 
