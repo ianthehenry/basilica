@@ -21,7 +21,7 @@ import           Network.WebSockets.Connection (defaultConnectionOptions)
 import qualified Sockets
 import           System.Random (getStdRandom, randomR)
 import           Web.Scotty
-
+import           Routes
 
 maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
@@ -39,6 +39,26 @@ lmdb db f = liftDB db . maybDB f
 liftDB :: MonadIO m => Database -> DatabaseM a -> m a
 liftDB db inner = liftIO (runReaderT inner db)
 
+route :: Database -> (ActionM () -> ScottyM ()) -> ActionM (Either Response Request) -> ScottyM ()
+route db path makeReq = path $ do
+  reqOrRes <- makeReq
+  let dbRes = either return execute reqOrRes
+  res <- liftDB db dbRes
+  send res
+
+simpleRoute :: Database -> (ActionM () -> ScottyM ()) -> ActionM Request -> ScottyM ()
+simpleRoute db path makeReq = route db path $
+  (Right <$> makeReq) `rescue` (return . Left . BadRequest)
+ 
+execute :: Request -> DatabaseM Response
+execute (GetPost idPost) = maybe (PostNotFound idPost) ExistingPost <$> getPost idPost
+
+send :: Response -> ActionM ()
+send (PostNotFound idPost) = status status404 >> text message
+  where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
+send (BadRequest message) = status status400 >> text message
+send (ExistingPost p) = json p
+
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
 basilica origin db emailChan = scottyApp $ do
   case origin of
@@ -49,8 +69,9 @@ basilica origin db emailChan = scottyApp $ do
         setHeader "Access-Control-Allow-Headers" "X-Token"
         setHeader "Access-Control-Allow-Methods" "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         status status200
-  get "/posts/:id" $
-    withPost json =<< param "id"
+
+  simpleRoute db (get "/posts/:id") (GetPost <$> param "id")
+
   get "/posts" $ do
     since <- maybeParam "after"
     liftDB db (getPostsSince since) >>= json
@@ -82,9 +103,6 @@ basilica origin db emailChan = scottyApp $ do
       else
         status status400 >> text "invalid username"
   where
-    withPost f idPost = do
-      liftIO $ print idPost
-      maybe (post404 idPost) f =<< liftDB db (getPost idPost)
     post404 idPost = status status404 >> text (postMessage idPost)
     postMessage idPost = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
     with400 a = rescue a (\msg -> status status400 >> text msg)
