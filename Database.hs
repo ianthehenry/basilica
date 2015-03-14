@@ -1,6 +1,7 @@
 module Database (
   module X,
   newDatabase,
+  DatabaseM,
   Database(..)
 ) where
 
