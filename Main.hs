@@ -52,12 +52,14 @@ simpleRoute db path makeReq = route db path $
  
 execute :: Request -> DatabaseM Response
 execute (GetPost idPost) = maybe (PostNotFound idPost) ExistingPost <$> getPost idPost
+execute (ListPosts since) = PostList <$> getPostsSince since
 
 send :: Response -> ActionM ()
 send (PostNotFound idPost) = status status404 >> text message
   where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
 send (BadRequest message) = status status400 >> text message
 send (ExistingPost p) = json p
+send (PostList ps) = json ps
 
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
 basilica origin db emailChan = scottyApp $ do
@@ -70,11 +72,11 @@ basilica origin db emailChan = scottyApp $ do
         setHeader "Access-Control-Allow-Methods" "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         status status200
 
-  simpleRoute db (get "/posts/:id") (GetPost <$> param "id")
+  let simple = simpleRoute db
 
-  get "/posts" $ do
-    since <- maybeParam "after"
-    liftDB db (getPostsSince since) >>= json
+  simple (get "/posts/:id") (GetPost <$> param "id")
+  simple (get "/posts") (ListPosts <$> maybeParam "after")
+
   post "/posts" $ with400 $ postPost Nothing
   post "/posts/:id" $
     with400 $ (Just <$> param "id") >>= postPost

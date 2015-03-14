@@ -5,11 +5,10 @@ import           Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy
 import           Types
 
-type Limit = Int
 type Name = Text
 
 data Request = GetPost ID
-             | ListPosts (Maybe ID) Limit
+             | ListPosts (Maybe ID)
              | CreatePost (Maybe ID) Text
              | CreateCode EmailAddress
              | CreateToken Code
@@ -19,7 +18,7 @@ data Response = NewPost ResolvedPost
               | ExistingPost ResolvedPost
               | NewCode Code
               | NewToken Token
-              | PostList [Post]
+              | PostList [ResolvedPost]
               | NotLoggedIn
               | PostNotFound ID
               | InvalidUsername
