@@ -5,7 +5,7 @@ module Types (
   CodeRecord(..),
   TokenRecord(..),
   User(..),
-  ResolvedPost,
+  ResolvedPost, ResolvedCode,
   ID, EmailAddress,
   Token, Code
 ) where
@@ -45,6 +45,7 @@ data User = User { userID :: ID
                  }
 
 type ResolvedPost = (Post, User)
+type ResolvedCode = (CodeRecord, User)
 
 postPairs :: Post -> [Aeson.Pair]
 postPairs Post{..} = [ "id" .= postID

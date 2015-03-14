@@ -52,9 +52,14 @@ insertCode CodeRecord{..} =
     args = [ toSql codeValue, toSql codeGeneratedAt
            , saneSql codeValid, toSql codeUserID ]
 
-createCode :: EmailAddress -> DatabaseM (Maybe CodeRecord)
-createCode email =
-  getUserByEmail email >>= maybe (return Nothing) (fmap Just . newCode)
+createCode :: EmailAddress -> DatabaseM (Maybe ResolvedCode)
+createCode email = do
+  maybeUser <- getUserByEmail email
+  case maybeUser of
+    Nothing -> return Nothing
+    Just user -> do
+      code <- newCode user
+      return (Just (code, user))
   where
     newCode user = do
       db <- ask

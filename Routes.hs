@@ -16,7 +16,8 @@ data Request = GetPost ID
 
 data Response = NewPost ResolvedPost
               | ExistingPost ResolvedPost
-              | NewCode Code
+              | NewCode ResolvedCode
+              | UnknownEmail
               | NewToken Token
               | PostList [ResolvedPost]
               | BadToken

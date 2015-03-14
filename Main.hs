@@ -45,15 +45,24 @@ lmdb db f = liftDB db . maybDB f
 liftDB :: MonadIO m => Database -> DatabaseM a -> m a
 liftDB db inner = liftIO (runReaderT inner db)
 
-route :: Database -> (ActionM () -> ScottyM ()) -> ActionM (Either Response Request) -> ScottyM ()
-route db path makeReq = path $ do
+route :: Database -> Chan (EmailAddress, Code)
+                  -> (ActionM () -> ScottyM ())
+                  -> ActionM (Either Response Request)
+                  -> ScottyM ()
+route db emailChan path makeReq = path $ do
   reqOrRes <- makeReq
   let dbRes = either return execute reqOrRes
   res <- liftDB db dbRes
-  send res
+  effect <- send res
+  case effect of
+    Noop -> return ()
+    SendEmail emailAddress code ->
+      liftIO (writeChan emailChan (emailAddress, code))
 
-simpleRoute :: Database -> (ActionM () -> ScottyM ()) -> ActionM Request -> ScottyM ()
-simpleRoute db path makeReq = route db path $
+simpleRoute :: Database -> Chan (EmailAddress, Code)
+                        -> (ActionM () -> ScottyM ())
+                        -> ActionM Request -> ScottyM ()
+simpleRoute db emailChan path makeReq = route db emailChan path $
   (Right <$> makeReq) `rescue` (return . Left . BadRequest)
  
 execute :: Request -> DatabaseM Response
@@ -65,17 +74,27 @@ execute (CreatePost idParent token content) = do
     Nothing -> return BadToken
     Just user -> maybe (PostNotFound $ fromJust idParent) NewPost
                  <$> createPost user content idParent
-  
-send :: Response -> ActionM ()
-send (PostNotFound idPost) = status status404 >> text message
-  where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
-send (BadRequest message) = status status400 >> text message
-send (ExistingPost p) = json p
-send (NewPost p) = json p
-send (PostList ps) = json ps
-send BadToken = status status401 >> text "invalid token"
+execute (CreateCode emailAddress) =
+  maybe UnknownEmail NewCode <$> createCode emailAddress
 
-basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
+data SideEffect = Noop
+                | SendEmail EmailAddress Code
+
+done :: ActionM SideEffect
+done = return Noop
+
+send :: Response -> ActionM SideEffect
+send (PostNotFound idPost) = status status404 >> text message >> done
+  where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
+send (BadRequest message) = status status400 >> text message >> done
+send (ExistingPost p) = json p >> done
+send (NewPost p) = json p >> done
+send (PostList ps) = json ps >> done
+send (NewCode (code, user)) = status status200 >> return (SendEmail (userEmail user) (codeValue code))
+send BadToken = status status401 >> text "invalid token" >> done
+send UnknownEmail = status status200 >> done
+
+basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, Code) -> IO Application
 basilica origin db emailChan = scottyApp $ do
   case origin of
     Nothing -> return ()
@@ -86,7 +105,7 @@ basilica origin db emailChan = scottyApp $ do
         setHeader "Access-Control-Allow-Methods" "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         status status200
 
-  let simple = simpleRoute db
+  let simple = simpleRoute db emailChan
 
   simple (get "/posts/:id") (GetPost <$> param "id")
   simple (get "/posts") (ListPosts <$> maybeParam "after")
@@ -95,13 +114,8 @@ basilica origin db emailChan = scottyApp $ do
   simple (post "/posts/:id") (CreatePost <$> (Just <$> param "id")
                                          <*> getHeader "X-Token"
                                          <*> param "content")
-  post "/codes" $
-    with400 $ do
-      emailAddress <- param "email"
-      liftDB db $ do
-        code <- createCode emailAddress
-        maybe (return ()) (liftIO . writeChan emailChan . (emailAddress,)) code
-      status status200
+  simple (post "/codes") (CreateCode <$> param "email")
+
   post "/tokens" $
     with400 $ do
       code <- param "code"
@@ -114,8 +128,8 @@ basilica origin db emailChan = scottyApp $ do
       if isValidName name then do
         user <- liftDB db (createUser email name)
         when (isJust user) $ liftDB db $ do
-           code <- fromJust <$> createCode email
-           liftIO $ writeChan emailChan (email, code)
+           (CodeRecord{codeValue}, User{userEmail}) <- fromJust <$> createCode email
+           liftIO $ writeChan emailChan (userEmail, codeValue)
         maybe (status status409) json user
       else
         status status400 >> text "invalid username"
@@ -150,25 +164,25 @@ randomSubject = (subjects !!) <$> getStdRandom (randomR (0, length subjects - 1)
                    , "Hey Syruptoes"
                    ]
 
-sendCodeMail :: Mailer -> Strict.Text -> (EmailAddress, CodeRecord) -> IO ()
-sendCodeMail mailer clientUrl (to, CodeRecord{codeValue}) = do
+sendCodeMail :: Mailer -> Strict.Text -> (EmailAddress, Code) -> IO ()
+sendCodeMail mailer clientUrl (to, code) = do
   subject <- randomSubject
   sendMail mailer (easyEmail to subject messageBody)
   where messageBody = Strict.intercalate "\n"
                       [ "Here's your Basilicode:"
                       , ""
-                      , codeValue
+                      , code
                       , ""
                       , "And a handy login link:"
                       , ""
-                      , clientUrl <> "/login?code=" <> codeValue
+                      , clientUrl <> "/login?code=" <> code
                       , ""
                       , "Love,"
                       , "  Basilica"
                       ]
 
-logCode :: (EmailAddress, CodeRecord) -> IO ()
-logCode (to, CodeRecord{codeValue}) = Text.putStrLn (Strict.intercalate ": " [to, codeValue])
+logCode :: (EmailAddress, Code) -> IO ()
+logCode (to, code) = Text.putStrLn (Strict.intercalate ": " [to, code])
 
 main :: IO ()
 main = do
