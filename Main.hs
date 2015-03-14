@@ -2,9 +2,10 @@ module Main where
 
 import           BasePrelude hiding (app, intercalate)
 import           Control.Monad.IO.Class (MonadIO)
-import           Control.Monad.Trans (liftIO)
 import           Control.Monad.Reader (runReaderT)
+import           Control.Monad.Trans (liftIO)
 import           Data.ByteString (ByteString)
+import           Data.CaseInsensitive (original)
 import qualified Data.Configurator as Conf
 import qualified Data.Text as Strict
 import qualified Data.Text.Encoding as Strict
@@ -18,17 +19,22 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
 import           Network.Wai.Handler.WebSockets (websocketsOr)
 import           Network.WebSockets.Connection (defaultConnectionOptions)
+import           Routes
 import qualified Sockets
 import           System.Random (getStdRandom, randomR)
 import           Web.Scotty
-import           Routes
 
 maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
 
-getHeader :: HeaderName -> ActionM (Maybe Strict.Text)
-getHeader name = (listToMaybe . map (Strict.decodeUtf8 . snd)
-                  . filter ((== name) . fst) . Wai.requestHeaders) <$> request
+maybeHeader :: HeaderName -> ActionM (Maybe Strict.Text)
+maybeHeader name = (listToMaybe . map (Strict.decodeUtf8 . snd)
+                   . filter ((== name) . fst) . Wai.requestHeaders) <$> request
+
+getHeader :: HeaderName -> ActionM Strict.Text
+getHeader name = maybe (raise message) return =<< maybeHeader name
+  where message = "missing \"" <> headerName <> "\" header"
+        headerName = (Lazy.fromStrict . Strict.decodeUtf8 . original) name
 
 maybDB :: (a -> DatabaseM (Maybe b)) -> Maybe a -> DatabaseM (Maybe b)
 maybDB = maybe (return Nothing)
@@ -53,13 +59,21 @@ simpleRoute db path makeReq = route db path $
 execute :: Request -> DatabaseM Response
 execute (GetPost idPost) = maybe (PostNotFound idPost) ExistingPost <$> getPost idPost
 execute (ListPosts since) = PostList <$> getPostsSince since
-
+execute (CreatePost idParent token content) = do
+  maybeUser <- getUserByToken token
+  case maybeUser of
+    Nothing -> return BadToken
+    Just user -> maybe (PostNotFound $ fromJust idParent) NewPost
+                 <$> createPost user content idParent
+  
 send :: Response -> ActionM ()
 send (PostNotFound idPost) = status status404 >> text message
   where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
 send (BadRequest message) = status status400 >> text message
 send (ExistingPost p) = json p
+send (NewPost p) = json p
 send (PostList ps) = json ps
+send BadToken = status status401 >> text "invalid token"
 
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, CodeRecord) -> IO Application
 basilica origin db emailChan = scottyApp $ do
@@ -76,10 +90,11 @@ basilica origin db emailChan = scottyApp $ do
 
   simple (get "/posts/:id") (GetPost <$> param "id")
   simple (get "/posts") (ListPosts <$> maybeParam "after")
-
-  post "/posts" $ with400 $ postPost Nothing
-  post "/posts/:id" $
-    with400 $ (Just <$> param "id") >>= postPost
+  simple (post "/posts") (CreatePost Nothing <$> getHeader "X-Token"
+                                             <*> param "content")
+  simple (post "/posts/:id") (CreatePost <$> (Just <$> param "id")
+                                         <*> getHeader "X-Token"
+                                         <*> param "content")
   post "/codes" $
     with400 $ do
       emailAddress <- param "email"
@@ -105,20 +120,10 @@ basilica origin db emailChan = scottyApp $ do
       else
         status status400 >> text "invalid username"
   where
-    post404 idPost = status status404 >> text (postMessage idPost)
-    postMessage idPost = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
     with400 a = rescue a (\msg -> status status400 >> text msg)
     isValidName name = all isAlphaNum (Strict.unpack name)
                        && (len >= 2) && (len < 20)
       where len = Strict.length name
-    postPost idParent = do
-      content <- param "content"
-      maybeUser <- lmdb db getUserByToken =<< getHeader "X-Token"
-      case maybeUser of
-        Nothing -> status status401 >> text "invalid token"
-        Just user -> do
-          maybePost <- liftDB db (createPost user content idParent)
-          maybe (post404 idParent) json maybePost
 
 withUser :: TokenRecord -> DatabaseM (TokenRecord, User)
 withUser token@TokenRecord{..} = do

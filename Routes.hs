@@ -9,7 +9,7 @@ type Name = Text
 
 data Request = GetPost ID
              | ListPosts (Maybe ID)
-             | CreatePost (Maybe ID) Text
+             | CreatePost (Maybe ID) Token Text
              | CreateCode EmailAddress
              | CreateToken Code
              | CreateUser Name EmailAddress
@@ -19,7 +19,7 @@ data Response = NewPost ResolvedPost
               | NewCode Code
               | NewToken Token
               | PostList [ResolvedPost]
-              | NotLoggedIn
+              | BadToken
               | PostNotFound ID
               | InvalidUsername
               | BadRequest Lazy.Text

@@ -27,6 +27,7 @@ executable basilica
                      , base-prelude
                      , base16-bytestring
                      , bytestring
+                     , case-insensitive
                      , configurator
                      , containers
                      , cryptohash
