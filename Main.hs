@@ -35,23 +35,27 @@ getHeader name = maybe (raise message) return =<< maybeHeader name
   where message = "missing \"" <> headerName <> "\" header"
         headerName = (Lazy.fromStrict . Strict.decodeUtf8 . original) name
 
-route :: Database -> Chan (EmailAddress, Code)
-                  -> (ActionM () -> ScottyM ())
-                  -> ActionM (Either Response Request)
-                  -> ScottyM ()
+route :: Database
+      -> Chan (EmailAddress, Code)
+      -> (ActionM () -> ScottyM ())
+      -> ActionM (Either Response Request)
+      -> ScottyM ()
 route db emailChan path makeReq = path $ do
   reqOrRes <- makeReq
   let dbRes = either return execute reqOrRes
   res <- liftIO (runReaderT dbRes db)
-  effect <- send res
-  case effect of
-    Noop -> return ()
-    SendEmail emailAddress code ->
-      liftIO (writeChan emailChan (emailAddress, code))
+  effects <- send res
+  mapM_ (liftIO . perform) effects
+  where
+    perform (SendEmail emailAddress code) =
+      writeChan emailChan (emailAddress, code)
+    perform (SocketUpdate p) = let chan = dbPostChan db in
+      writeChan chan p
 
-simpleRoute :: Database -> Chan (EmailAddress, Code)
-                        -> (ActionM () -> ScottyM ())
-                        -> ActionM Request -> ScottyM ()
+simpleRoute :: Database
+            -> Chan (EmailAddress, Code)
+            -> (ActionM () -> ScottyM ())
+            -> ActionM Request -> ScottyM ()
 simpleRoute db emailChan path makeReq = route db emailChan path $
   (Right <$> makeReq) `rescue` (return . Left . BadRequest)
  
@@ -76,20 +80,20 @@ execute (CreateUser email name) = do
     Nothing -> return ExistingNameOrEmail
     Just User{userEmail} -> NewUser . fromJust <$> createCode userEmail
 
-data SideEffect = Noop
-                | SendEmail EmailAddress Code
+data SideEffect = SendEmail EmailAddress Code
+                | SocketUpdate ResolvedPost
 
-done :: ActionM SideEffect
-done = return Noop
+done :: ActionM [SideEffect]
+done = return []
 
-send :: Response -> ActionM SideEffect
-send (NewPost p) = json p >> return (SocketUpdate p)
+send :: Response -> ActionM [SideEffect]
+send (NewPost p) = json p >> return [SocketUpdate p]
 send (ExistingPost p) = json p >> done
 send (PostList ps) = json ps >> done
 send (NewToken t) = json t >> done
 send (NewUser resolvedCode@(_, user)) = json user >> send (NewCode resolvedCode)
-send (NewCode (code, user)) = return (SendEmail (userEmail user)
-                                                (codeValue code))
+send (NewCode (code, user)) = return [SendEmail (userEmail user)
+                                                (codeValue code)]
 send BadToken = status status401 >> text "invalid token" >> done
 send BadCode = status status401 >> text "invalid code" >> done
 send UnknownEmail = status status200 >> done

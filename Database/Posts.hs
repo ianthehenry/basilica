@@ -52,13 +52,8 @@ getPostsSince (Just idPost) =
 
 insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
 insertPost User{userID = idUser} content idParent at =
-  insertRow query args >>= maybe (return Nothing) report
+  insertRow query args >>= maybe (return Nothing) getPost
   where
-    report idPost = do
-      db <- ask
-      post <- fromJust <$> getPost idPost
-      liftIO $ writeChan (dbPostChan db) post
-      return (Just post)
     query = unlines [ "insert into posts"
                     , "(id_user, content, id_parent, at)"
                     , "values (?, ?, ?, ?)"
