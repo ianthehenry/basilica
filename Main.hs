@@ -26,6 +26,17 @@ import           Web.Scotty
 maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
 
+defaultParam :: Parsable a => Lazy.Text -> a -> ActionM a
+defaultParam name def = (param name) `rescue` (return . const def)
+
+validated :: Parsable a => (a -> Bool) -> Lazy.Text -> ActionM a -> ActionM a
+validated f errorMessage val = do
+  inner <- val
+  if f inner then
+    val
+  else
+    raise errorMessage
+
 maybeHeader :: HeaderName -> ActionM (Maybe Strict.Text)
 maybeHeader name = (listToMaybe . map (Strict.decodeUtf8 . snd)
                    . filter ((== name) . fst) . Wai.requestHeaders) <$> request
@@ -63,7 +74,7 @@ simpleRoute db emailChan socketChan path makeReq = route db emailChan socketChan
  
 execute :: Request -> DatabaseM Response
 execute (GetPost idPost) = maybe (PostNotFound idPost) ExistingPost <$> getPost idPost
-execute (ListPosts since) = PostList <$> getPostsSince since
+execute (ListPosts since limit) = PostList <$> getPostsSince since limit
 execute (CreatePost idParent token content) = do
   maybeUser <- getUserByToken token
   case maybeUser of
@@ -105,6 +116,12 @@ send (BadRequest message) = status status400 >> text message >> done
 send (PostNotFound idPost) = status status404 >> text message >> done
   where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
 
+isLegalLimit :: Int -> Bool
+isLegalLimit x
+  | x < 1 = False
+  | x > 500 = False
+  | otherwise = True
+
 basilica :: Maybe ByteString
          -> Database
          -> Chan (EmailAddress, Code)
@@ -122,8 +139,10 @@ basilica origin db emailChan socketChan = scottyApp $ do
 
   let simple = simpleRoute db emailChan socketChan
 
+  let limit = validated isLegalLimit "limit out of range"
+                        (defaultParam "limit" 200)
+  simple (get "/posts") (ListPosts <$> maybeParam "after" <*> limit)
   simple (get "/posts/:id") (GetPost <$> param "id")
-  simple (get "/posts") (ListPosts <$> maybeParam "after")
   simple (post "/posts") (CreatePost Nothing <$> getHeader "X-Token"
                                              <*> param "content")
   simple (post "/posts/:id") (CreatePost <$> (Just <$> param "id")

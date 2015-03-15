@@ -162,8 +162,7 @@ $ curl -i                             # show response headers (otherwise a 401 i
         - optional
         - the response will only contain posts created after the specified post
     - `limit`: the maximum number of posts to return
-        - **not implemented**
-        - default: `50`
+        - default: `200`
         - valid values: `1` to `500`
 - response:
     - if `after` is specified, and there were more than `limit` posts to return, this returns... some error code. I'm not sure what though. `410`, maybe?

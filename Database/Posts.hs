@@ -2,11 +2,10 @@ module Database.Posts (
   createPost,
   getPostsSince,
   getPost,
-  postChildren,
 ) where
 
 import BasePrelude
-import Control.Monad.Reader (liftIO, ask)
+import Control.Monad.Reader (liftIO)
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Database.Internal
@@ -26,8 +25,8 @@ toPost [idPost, idUser, content, idParent, at, count, _, name, email] =
          }
   )
 
-postQuery :: String -> [SqlValue] -> DatabaseM [ResolvedPost]
-postQuery whereClause args = fmap toPost <$> runQuery query args
+postQuery :: Int -> String -> [SqlValue] -> DatabaseM [ResolvedPost]
+postQuery limit whereClause args = fmap toPost <$> runQuery query (args ++ [toSql limit])
   where query = unlines [ "select posts.*, count(children.id), users.* from posts"
                         , "left outer join posts as children"
                         , "  on children.id_parent = posts.id"
@@ -35,20 +34,17 @@ postQuery whereClause args = fmap toPost <$> runQuery query args
                         , whereClause
                         , "group by posts.id"
                         , "order by posts.id desc"
+                        , "limit ?"
                         ]
 
 getPost :: ID -> DatabaseM (Maybe ResolvedPost)
 getPost idPost = listToMaybe <$>
-  postQuery "where posts.id = ?" [toSql idPost]
+  postQuery 1 "where posts.id = ?" [toSql idPost]
 
-postChildren :: ID -> DatabaseM [ResolvedPost]
-postChildren idPost =
-  postQuery "where posts.id_parent = ?" [toSql idPost]
-
-getPostsSince :: Maybe ID -> DatabaseM [ResolvedPost]
-getPostsSince Nothing = postQuery "" []
-getPostsSince (Just idPost) =
-  postQuery "where posts.id > ?" [toSql idPost]
+getPostsSince :: Maybe ID -> Int -> DatabaseM [ResolvedPost]
+getPostsSince Nothing limit = postQuery limit "" []
+getPostsSince (Just idPost) limit =
+  postQuery limit "where posts.id > ?" [toSql idPost]
 
 insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
 insertPost User{userID = idUser} content idParent at =
