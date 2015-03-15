@@ -17,10 +17,8 @@ newDatabase :: FilePath -> IO Database
 newDatabase path = do
   conn <- connectSqlite3 path
   runRaw conn "COMMIT; PRAGMA foreign_keys = ON; BEGIN TRANSACTION;"
-  newPosts <- newChan
   rng <- newGenIO :: IO HashDRBG
   rngSlot <- newMVar rng
   return Database { dbConn = conn
-                  , dbPostChan = newPosts
                   , dbRNG = rngSlot
                   }

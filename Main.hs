@@ -37,10 +37,11 @@ getHeader name = maybe (raise message) return =<< maybeHeader name
 
 route :: Database
       -> Chan (EmailAddress, Code)
+      -> Chan ResolvedPost
       -> (ActionM () -> ScottyM ())
       -> ActionM (Either Response Request)
       -> ScottyM ()
-route db emailChan path makeReq = path $ do
+route db emailChan socketChan path makeReq = path $ do
   reqOrRes <- makeReq
   let dbRes = either return execute reqOrRes
   res <- liftIO (runReaderT dbRes db)
@@ -49,14 +50,15 @@ route db emailChan path makeReq = path $ do
   where
     perform (SendEmail emailAddress code) =
       writeChan emailChan (emailAddress, code)
-    perform (SocketUpdate p) = let chan = dbPostChan db in
-      writeChan chan p
+    perform (SocketUpdate p) =
+      writeChan socketChan p
 
 simpleRoute :: Database
             -> Chan (EmailAddress, Code)
+            -> Chan ResolvedPost
             -> (ActionM () -> ScottyM ())
             -> ActionM Request -> ScottyM ()
-simpleRoute db emailChan path makeReq = route db emailChan path $
+simpleRoute db emailChan socketChan path makeReq = route db emailChan socketChan path $
   (Right <$> makeReq) `rescue` (return . Left . BadRequest)
  
 execute :: Request -> DatabaseM Response
@@ -103,8 +105,12 @@ send (BadRequest message) = status status400 >> text message >> done
 send (PostNotFound idPost) = status status404 >> text message >> done
   where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
 
-basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, Code) -> IO Application
-basilica origin db emailChan = scottyApp $ do
+basilica :: Maybe ByteString
+         -> Database
+         -> Chan (EmailAddress, Code)
+         -> Chan ResolvedPost
+         -> IO Application
+basilica origin db emailChan socketChan = scottyApp $ do
   case origin of
     Nothing -> return ()
     Just o -> do
@@ -114,7 +120,7 @@ basilica origin db emailChan = scottyApp $ do
         setHeader "Access-Control-Allow-Methods" "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         status status200
 
-  let simple = simpleRoute db emailChan
+  let simple = simpleRoute db emailChan socketChan
 
   simple (get "/posts/:id") (GetPost <$> param "id")
   simple (get "/posts") (ListPosts <$> maybeParam "after")
@@ -126,7 +132,7 @@ basilica origin db emailChan = scottyApp $ do
   simple (post "/codes") (CreateCode <$> param "email")
   simple (post "/tokens") (CreateToken <$> param "code")
 
-  route db emailChan (post "/users") $ do
+  route db emailChan socketChan (post "/users") $ do
     name <- param "name"
     if isValidName name then
       (fmap Right . CreateUser) <$> param "email" <*> pure name
@@ -190,8 +196,9 @@ main = do
     Just key -> sendCodeMail (newMailer key) <$> Conf.require conf "client-url"
   db <- newDatabase =<< Conf.require conf "dbpath"
   emailChan <- newChan
-  server <- Sockets.newServer (dbPostChan db)
-  api <- basilica origin db emailChan
+  socketChan <- newChan
+  server <- Sockets.newServer socketChan
+  api <- basilica origin db emailChan socketChan
   forkIO $ getChanContents emailChan >>= mapM_ mailHandler
   putStrLn $ "Running on port " ++ show port
   Warp.run port (websocketsOr defaultConnectionOptions server api)

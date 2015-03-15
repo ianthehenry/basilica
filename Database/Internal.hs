@@ -21,7 +21,6 @@ import           Database.HDBC.Sqlite3 (Connection)
 import           Types as X
 
 data Database = Database { dbConn :: Connection
-                         , dbPostChan :: Chan ResolvedPost
                          , dbRNG :: MVar HashDRBG
                          }
 
