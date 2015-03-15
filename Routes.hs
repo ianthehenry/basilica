@@ -8,7 +8,7 @@ import           Types
 type Name = Text
 
 data Request = GetPost ID
-             | ListPosts (Maybe ID) Int
+             | ListPosts PostQuery
              | CreatePost (Maybe ID) Token Text
              | CreateCode EmailAddress
              | CreateToken Code

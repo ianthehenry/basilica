@@ -74,7 +74,7 @@ simpleRoute db emailChan socketChan path makeReq = route db emailChan socketChan
  
 execute :: Request -> DatabaseM Response
 execute (GetPost idPost) = maybe (PostNotFound idPost) ExistingPost <$> getPost idPost
-execute (ListPosts since limit) = PostList <$> getPostsSince since limit
+execute (ListPosts query) = PostList <$> getPosts query
 execute (CreatePost idParent token content) = do
   maybeUser <- getUserByToken token
   case maybeUser of
@@ -141,7 +141,9 @@ basilica origin db emailChan socketChan = scottyApp $ do
 
   let limit = validated isLegalLimit "limit out of range"
                         (defaultParam "limit" 200)
-  simple (get "/posts") (ListPosts <$> maybeParam "after" <*> limit)
+  simple (get "/posts") (ListPosts <$> (PostQuery <$> maybeParam "before"
+                                                  <*> maybeParam "after"
+                                                  <*> limit))
   simple (get "/posts/:id") (GetPost <$> param "id")
   simple (post "/posts") (CreatePost Nothing <$> getHeader "X-Token"
                                              <*> param "content")

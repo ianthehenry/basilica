@@ -2,6 +2,7 @@
 
 module Types (
   Post(..),
+  PostQuery(..),
   CodeRecord(..),
   TokenRecord(..),
   User(..),
@@ -21,6 +22,11 @@ import qualified Data.ByteString.Base16 as Hex
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import           Data.Time.Clock (UTCTime)
+
+data PostQuery = PostQuery { postQueryBefore :: Maybe ID
+                           , postQueryAfter :: Maybe ID
+                           , postQueryLimit :: Int
+                           }
 
 data Post = Post { postID :: ID
                  , postUserID :: ID

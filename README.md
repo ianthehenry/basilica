@@ -161,6 +161,9 @@ $ curl -i                             # show response headers (otherwise a 401 i
     - `after`: the `id` of a post
         - optional
         - the response will only contain posts created after the specified post
+    - `before`: the `id` of a post
+        - optional
+        - the response will only contain posts created before the specified post
     - `limit`: the maximum number of posts to return
         - default: `200`
         - valid values: `1` to `500`

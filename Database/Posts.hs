@@ -1,6 +1,6 @@
 module Database.Posts (
   createPost,
-  getPostsSince,
+  getPosts,
   getPost,
 ) where
 
@@ -41,10 +41,20 @@ getPost :: ID -> DatabaseM (Maybe ResolvedPost)
 getPost idPost = listToMaybe <$>
   postQuery 1 "where posts.id = ?" [toSql idPost]
 
-getPostsSince :: Maybe ID -> Int -> DatabaseM [ResolvedPost]
-getPostsSince Nothing limit = postQuery limit "" []
-getPostsSince (Just idPost) limit =
-  postQuery limit "where posts.id > ?" [toSql idPost]
+getPosts :: PostQuery -> DatabaseM [ResolvedPost]
+getPosts PostQuery{..} =
+  postQuery postQueryLimit query args
+  where
+    args = toSql <$> (catMaybes (snd <$> components))
+    query = case queryComponents of
+      [] -> ""
+      xs -> "where " <> (intercalate " and " xs)
+    queryComponents = catMaybes (makeWhereClause <$> components)
+    makeWhereClause (_, Nothing) = Nothing
+    makeWhereClause (x, _) = Just x
+    components = [ ("posts.id > ?", postQueryAfter)
+                 , ("posts.id < ?", postQueryBefore)
+                 ]
 
 insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
 insertPost User{userID = idUser} content idParent at =
