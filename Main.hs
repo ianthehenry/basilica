@@ -76,6 +76,10 @@ execute (CreatePost idParent token content) = do
                  <$> createPost user content idParent
 execute (CreateCode emailAddress) =
   maybe UnknownEmail NewCode <$> createCode emailAddress
+execute (CreateToken code) =
+  maybe (return BadCode) (fmap NewToken . withUser) =<< createToken code
+  where withUser token@TokenRecord{tokenUserID} =
+          (token,) . fromJust <$> getUser tokenUserID
 
 data SideEffect = Noop
                 | SendEmail EmailAddress Code
@@ -91,7 +95,9 @@ send (ExistingPost p) = json p >> done
 send (NewPost p) = json p >> done
 send (PostList ps) = json ps >> done
 send (NewCode (code, user)) = status status200 >> return (SendEmail (userEmail user) (codeValue code))
+send (NewToken t) = json t >> done
 send BadToken = status status401 >> text "invalid token" >> done
+send BadCode = status status401 >> text "invalid code" >> done
 send UnknownEmail = status status200 >> done
 
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, Code) -> IO Application
@@ -115,12 +121,8 @@ basilica origin db emailChan = scottyApp $ do
                                          <*> getHeader "X-Token"
                                          <*> param "content")
   simple (post "/codes") (CreateCode <$> param "email")
+  simple (post "/tokens") (CreateToken <$> param "code")
 
-  post "/tokens" $
-    with400 $ do
-      code <- param "code"
-      token <- liftDB db (createToken code)
-      maybe (status status401) (\t -> liftDB db (withUser t) >>= json) token
   post "/users" $
     with400 $ do
       email <- param "email"
@@ -138,11 +140,6 @@ basilica origin db emailChan = scottyApp $ do
     isValidName name = all isAlphaNum (Strict.unpack name)
                        && (len >= 2) && (len < 20)
       where len = Strict.length name
-
-withUser :: TokenRecord -> DatabaseM (TokenRecord, User)
-withUser token@TokenRecord{..} = do
-  user <- fromJust <$> getUser tokenUserID
-  return (token, user)
 
 addHeaders :: ResponseHeaders -> Wai.Middleware
 addHeaders newHeaders app req respond = app req $ \response -> do

@@ -18,9 +18,10 @@ data Response = NewPost ResolvedPost
               | ExistingPost ResolvedPost
               | NewCode ResolvedCode
               | UnknownEmail
-              | NewToken Token
+              | NewToken ResolvedToken
               | PostList [ResolvedPost]
               | BadToken
+              | BadCode
               | PostNotFound ID
               | InvalidUsername
               | BadRequest Lazy.Text
