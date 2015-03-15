@@ -12,16 +12,18 @@ data Request = GetPost ID
              | CreatePost (Maybe ID) Token Text
              | CreateCode EmailAddress
              | CreateToken Code
-             | CreateUser Name EmailAddress
+             | CreateUser EmailAddress Name
 
 data Response = NewPost ResolvedPost
               | ExistingPost ResolvedPost
-              | NewCode ResolvedCode
-              | UnknownEmail
-              | NewToken ResolvedToken
               | PostList [ResolvedPost]
+              | NewToken ResolvedToken
+              | NewUser ResolvedCode
+              | NewCode ResolvedCode
               | BadToken
               | BadCode
-              | PostNotFound ID
+              | UnknownEmail
               | InvalidUsername
+              | ExistingNameOrEmail
               | BadRequest Lazy.Text
+              | PostNotFound ID

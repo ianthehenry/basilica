@@ -80,6 +80,11 @@ execute (CreateToken code) =
   maybe (return BadCode) (fmap NewToken . withUser) =<< createToken code
   where withUser token@TokenRecord{tokenUserID} =
           (token,) . fromJust <$> getUser tokenUserID
+execute (CreateUser email name) = do
+  maybeUser <- createUser email name
+  case maybeUser of
+    Nothing -> return ExistingNameOrEmail
+    Just User{userEmail} -> NewUser . fromJust <$> createCode userEmail
 
 data SideEffect = Noop
                 | SendEmail EmailAddress Code
@@ -88,17 +93,21 @@ done :: ActionM SideEffect
 done = return Noop
 
 send :: Response -> ActionM SideEffect
-send (PostNotFound idPost) = status status404 >> text message >> done
-  where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
-send (BadRequest message) = status status400 >> text message >> done
+send (NewPost p) = json p >> return (SocketUpdate p)
 send (ExistingPost p) = json p >> done
-send (NewPost p) = json p >> done
 send (PostList ps) = json ps >> done
-send (NewCode (code, user)) = status status200 >> return (SendEmail (userEmail user) (codeValue code))
 send (NewToken t) = json t >> done
+send (NewUser resolvedCode@(_, user)) = json user >> send (NewCode resolvedCode)
+send (NewCode (code, user)) = return (SendEmail (userEmail user)
+                                                (codeValue code))
 send BadToken = status status401 >> text "invalid token" >> done
 send BadCode = status status401 >> text "invalid code" >> done
 send UnknownEmail = status status200 >> done
+send InvalidUsername = status status400 >> text "invalid username" >> done
+send ExistingNameOrEmail = status status409 >> text "username or email address taken" >> done
+send (BadRequest message) = status status400 >> text message >> done
+send (PostNotFound idPost) = status status404 >> text message >> done
+  where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
 
 basilica :: Maybe ByteString -> Database -> Chan (EmailAddress, Code) -> IO Application
 basilica origin db emailChan = scottyApp $ do
@@ -123,23 +132,18 @@ basilica origin db emailChan = scottyApp $ do
   simple (post "/codes") (CreateCode <$> param "email")
   simple (post "/tokens") (CreateToken <$> param "code")
 
-  post "/users" $
-    with400 $ do
-      email <- param "email"
-      name <- param "name"
-      if isValidName name then do
-        user <- liftDB db (createUser email name)
-        when (isJust user) $ liftDB db $ do
-           (CodeRecord{codeValue}, User{userEmail}) <- fromJust <$> createCode email
-           liftIO $ writeChan emailChan (userEmail, codeValue)
-        maybe (status status409) json user
-      else
-        status status400 >> text "invalid username"
-  where
-    with400 a = rescue a (\msg -> status status400 >> text msg)
-    isValidName name = all isAlphaNum (Strict.unpack name)
-                       && (len >= 2) && (len < 20)
-      where len = Strict.length name
+  route db emailChan (post "/users") $ do
+    name <- param "name"
+    if isValidName name then
+      (fmap Right . CreateUser) <$> param "email" <*> pure name
+    else
+      return (Left InvalidUsername)
+
+isValidName :: Strict.Text -> Bool
+isValidName name =
+  all isAlphaNum (Strict.unpack name)
+  && (len >= 2) && (len < 20)
+  where len = Strict.length name
 
 addHeaders :: ResponseHeaders -> Wai.Middleware
 addHeaders newHeaders app req respond = app req $ \response -> do
