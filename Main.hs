@@ -1,7 +1,6 @@
-module Main where
+module Main (main) where
 
 import           BasePrelude hiding (app, intercalate)
-import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Reader (runReaderT)
 import           Control.Monad.Trans (liftIO)
 import           Data.ByteString (ByteString)
@@ -36,15 +35,6 @@ getHeader name = maybe (raise message) return =<< maybeHeader name
   where message = "missing \"" <> headerName <> "\" header"
         headerName = (Lazy.fromStrict . Strict.decodeUtf8 . original) name
 
-maybDB :: (a -> DatabaseM (Maybe b)) -> Maybe a -> DatabaseM (Maybe b)
-maybDB = maybe (return Nothing)
-
-lmdb :: MonadIO m => Database -> (a -> DatabaseM (Maybe b)) -> Maybe a -> m (Maybe b)
-lmdb db f = liftDB db . maybDB f
-
-liftDB :: MonadIO m => Database -> DatabaseM a -> m a
-liftDB db inner = liftIO (runReaderT inner db)
-
 route :: Database -> Chan (EmailAddress, Code)
                   -> (ActionM () -> ScottyM ())
                   -> ActionM (Either Response Request)
@@ -52,7 +42,7 @@ route :: Database -> Chan (EmailAddress, Code)
 route db emailChan path makeReq = path $ do
   reqOrRes <- makeReq
   let dbRes = either return execute reqOrRes
-  res <- liftDB db dbRes
+  res <- liftIO (runReaderT dbRes db)
   effect <- send res
   case effect of
     Noop -> return ()
