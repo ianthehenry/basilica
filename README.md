@@ -1,5 +1,7 @@
 # Basilica
 
+You can see a live demo running at https://basilica.horse, which currently hosts both [the API](https://basilica.horse/api/posts) and the [official Om client](https://github.com/ianthehenry/basilica-client).
+
 A basilica is like a forum, but for a few ill-defined differences. For more detail please consult the table below, adapted from a crude sketch I made while drunk.
 
 Forum | Basilica
