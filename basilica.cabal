@@ -14,7 +14,7 @@ executable basilica
                , HDBC ==2.4.*
                , HDBC-sqlite3 ==2.3.*
                , aeson ==0.8.*
-               , base >=4.7 && <4.9, base-prelude
+               , base >=4.6 && <4.9, base-prelude
                , base16-bytestring ==0.1.1.*
                , bytestring ==0.10.4.*
                , configurator ==0.3.*
