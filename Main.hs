@@ -1,11 +1,11 @@
 module Main (main) where
 
 import           BasePrelude hiding (app, intercalate)
+import           Config
 import           Control.Monad.Reader (runReaderT)
 import           Control.Monad.Trans (liftIO)
 import           Data.ByteString (ByteString)
 import           Data.CaseInsensitive (original)
-import qualified Data.Configurator as Conf
 import qualified Data.Text as Strict
 import qualified Data.Text.Encoding as Strict
 import qualified Data.Text.IO as Text
@@ -208,18 +208,15 @@ logCode (to, code) = Text.putStrLn (Strict.intercalate ": " [to, code])
 
 main :: IO ()
 main = do
-  conf <- Conf.load [Conf.Required "conf"]
-  port <- Conf.require conf "port"
-  origin <- Conf.lookup conf "client-origin"
-  mandrillKey <- Conf.lookup conf "mandrill-key"
-  mailHandler <- case mandrillKey of
-    Nothing -> return logCode
-    Just key -> sendCodeMail (newMailer key) <$> Conf.require conf "client-url"
-  db <- newDatabase =<< Conf.require conf "dbpath"
+  Config {..} <- loadConfig
+  let mailHandler = case confMandrillKey of
+        Nothing -> logCode
+        Just key -> sendCodeMail (newMailer key) confClientUrl
+  db <- newDatabase confDBPath
   emailChan <- newChan
   socketChan <- newChan
   server <- Sockets.newServer socketChan
-  api <- basilica origin db emailChan socketChan
+  api <- basilica confClientOrigin db emailChan socketChan
   forkIO $ getChanContents emailChan >>= mapM_ mailHandler
-  putStrLn $ "Running on port " ++ show port
-  Warp.run port (websocketsOr defaultConnectionOptions server api)
+  putStrLn $ "Running on port " ++ show confPort
+  Warp.run confPort (websocketsOr defaultConnectionOptions server api)
