@@ -1,4 +1,4 @@
-module Main (main) where
+module Main (basilicaWaiApp, loadConfig, main) where
 
 import           BasePrelude hiding (app, intercalate)
 import           Config
@@ -122,12 +122,12 @@ isLegalLimit x
   | x > 500 = False
   | otherwise = True
 
-basilica :: Maybe ByteString
-         -> Database
-         -> Chan (EmailAddress, Code)
-         -> Chan ResolvedPost
-         -> IO Application
-basilica origin db emailChan socketChan = scottyApp $ do
+basilicaHttpHandler :: Maybe ByteString
+                    -> Database
+                    -> Chan (EmailAddress, Code)
+                    -> Chan ResolvedPost
+                    -> ScottyM ()
+basilicaHttpHandler origin db emailChan socketChan = do
   case origin of
     Nothing -> return ()
     Just o -> do
@@ -206,17 +206,22 @@ sendCodeMail mailer clientUrl (to, code) = do
 logCode :: (EmailAddress, Code) -> IO ()
 logCode (to, code) = Text.putStrLn (Strict.intercalate ": " [to, code])
 
-main :: IO ()
-main = do
-  Config {..} <- loadConfig
+basilicaWaiApp :: Config -> IO Application
+basilicaWaiApp Config {..} = do
   let mailHandler = case confMandrillKey of
         Nothing -> logCode
         Just key -> sendCodeMail (newMailer key) confClientUrl
   db <- newDatabase confDBPath
   emailChan <- newChan
   socketChan <- newChan
-  server <- Sockets.newServer socketChan
-  api <- basilica confClientOrigin db emailChan socketChan
+  wsServer <- Sockets.newServer socketChan
+  httpServer <- scottyApp $ basilicaHttpHandler confClientOrigin db emailChan socketChan
   forkIO $ getChanContents emailChan >>= mapM_ mailHandler
-  putStrLn $ "Running on port " ++ show confPort
-  Warp.run confPort (websocketsOr defaultConnectionOptions server api)
+  return $ websocketsOr defaultConnectionOptions wsServer httpServer
+
+main :: IO ()
+main = do
+  config <- loadConfig
+  app <- basilicaWaiApp config
+  putStrLn $ "Running on port " ++ show (confPort config)
+  Warp.run (confPort config) app
