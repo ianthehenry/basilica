@@ -14,28 +14,26 @@ executable basilica
                , HDBC ==2.4.*
                , HDBC-sqlite3 ==2.3.*
                , aeson ==0.8.*
-               , base >=4.6 && <4.9, base-prelude
+               , base >=4.6 && <5.0, base-prelude
                , base16-bytestring ==0.1.1.*
-               , bytestring ==0.10.4.*
+               , bytestring ==0.10.6.*
                , configurator ==0.3.*
                , containers ==0.5.*
                , cryptohash ==0.11.*
                , filepath ==1.3.*
                , http-types ==0.8.*
-               , io-streams ==1.2.*
                , mtl ==2.2.*, transformers
                , random ==1.1.*
                , scotty ==0.9.*
                , suspend ==0.2.0.*
                , text ==1.2.*
-               -- wreq 0.3.0.1 won't build against time 1.5 yet
-               , time ==1.4.*
+               , time ==1.5.*
                , timers ==0.2.*
                , unix-time ==0.3.*
                , wai ==3.0.*, case-insensitive
                , warp ==3.0.*
-               , websockets ==0.9.*, wai-websockets
-               , wreq ==0.3.*
+               , websockets ==0.9.*, wai-websockets, io-streams
+               , wreq ==0.4.*
 
   default-extensions: OverloadedStrings
                     , NoImplicitPrelude
