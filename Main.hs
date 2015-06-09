@@ -27,7 +27,7 @@ maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
 
 defaultParam :: Parsable a => Lazy.Text -> a -> ActionM a
-defaultParam name def = (param name) `rescue` (return . const def)
+defaultParam name def = param name `rescue` (return . const def)
 
 validated :: Parsable a => (a -> Bool) -> Lazy.Text -> ActionM a -> ActionM a
 validated f errorMessage val = do
@@ -71,7 +71,7 @@ simpleRoute :: Database
             -> ActionM Request -> ScottyM ()
 simpleRoute db emailChan socketChan path makeReq = route db emailChan socketChan path $
   (Right <$> makeReq) `rescue` (return . Left . BadRequest)
- 
+
 execute :: Request -> DatabaseM Response
 execute (GetPost idPost) = maybe (PostNotFound idPost) ExistingPost <$> getPost idPost
 execute (ListPosts query) = PostList <$> getPosts query

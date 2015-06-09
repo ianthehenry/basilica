@@ -45,10 +45,10 @@ getPosts :: PostQuery -> DatabaseM [ResolvedPost]
 getPosts PostQuery{..} =
   postQuery postQueryLimit query args
   where
-    args = toSql <$> (catMaybes (snd <$> components))
+    args = toSql <$> catMaybes (snd <$> components)
     query = case queryComponents of
       [] -> ""
-      xs -> "where " <> (intercalate " and " xs)
+      xs -> "where " <> intercalate " and " xs
     queryComponents = catMaybes (makeWhereClause <$> components)
     makeWhereClause (_, Nothing) = Nothing
     makeWhereClause (x, _) = Just x

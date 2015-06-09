@@ -16,7 +16,6 @@ import           Data.UnixTime (UnixTime, getUnixTime, secondsToUnixDiffTime, di
 import qualified Network.HTTP.Types.URI as URI
 import qualified Network.WebSockets as WS
 import           System.IO.Streams.Attoparsec (ParseException)
-
 import           Types
 
 type Broadcaster = Post -> IO ()
