@@ -1,0 +1,28 @@
+dependencies:
+  cache_directories:
+    - "~/.stack"
+    - "~/vendor"
+    - ".stack-work"
+
+  pre:
+    - set -eu
+    - if [[ ! -d ~/vendor ]]; then
+        mkdir ~/vendor;
+      fi
+    - export STACK_VERSION=v1.0.0;
+      export STACK_FILENAME=stack-1.0.0-linux-x86_64.tar.gz;
+      if [[ ! -f /usr/bin/stack ]]; then
+        curl https://github.com/commercialhaskell/stack/releases/download/$STACK_VERSION/$STACK_FILENAME.tar.gz -Lo ~/vendor/stack.tar.gz;
+        tar xf ~/vendor/stack.tar.gz -C ~/vendor;
+        sudo mv ~/vendor/$STACK_FILENAME/stack /usr/bin/stack;
+      fi
+
+  override:
+    - stack setup
+    # Building this separately avoids out-of-memory crashes on Circle CI.
+    - stack build warp
+    - stack build --test --no-run-tests --ghc-options="-Werror -O0"
+
+test:
+  override:
+    - stack test

@@ -2,9 +2,7 @@ flags: {}
 packages:
 - '.'
 extra-deps:
-- HDBC-2.4.0.1
-- HDBC-sqlite3-2.3.3.1
 - suspend-0.2.0.0
 - timers-0.2.0.3
 
-resolver: lts-3.8
+resolver: lts-4.0
