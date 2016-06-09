@@ -86,7 +86,7 @@ execute (CreateCode emailAddress) =
 execute (CreateToken code) =
   maybe (return BadCode) (fmap NewToken . withUser) =<< createToken code
   where withUser token@TokenRecord{tokenUserID} =
-          (token,) . fromJust <$> getUser tokenUserID
+          ResolvedToken token . fromJust <$> getUser tokenUserID
 execute (CreateUser email name) = do
   maybeUser <- createUser email name
   case maybeUser of
@@ -104,9 +104,9 @@ send (NewPost p) = json p >> return [SocketUpdate p]
 send (ExistingPost p) = json p >> done
 send (PostList ps) = json ps >> done
 send (NewToken t) = json t >> done
-send (NewUser resolvedCode@(_, user)) = json user >> send (NewCode resolvedCode)
-send (NewCode (code, user)) = return [SendEmail (userEmail user)
-                                                (codeValue code)]
+send (NewUser resolvedCode@(ResolvedCode _ user)) = json user >> send (NewCode resolvedCode)
+send (NewCode (ResolvedCode code user)) = return [SendEmail (userEmail user)
+                                                            (codeValue code)]
 send BadToken = status status401 >> text "invalid token" >> done
 send BadCode = status status401 >> text "invalid code" >> done
 send UnknownEmail = status status200 >> done

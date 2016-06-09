@@ -9,21 +9,21 @@ import Control.Monad.Reader (liftIO)
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Database.Internal
+import Types
 
 toPost :: [SqlValue] -> ResolvedPost
-toPost [idPost, idUser, content, idParent, at, count, _, name, email] =
-  ( Post { postID = fromSql idPost
-         , postContent = fromSql content
-         , postAt = fromSql at
-         , postUserID = fromSql idUser
-         , postParentID = fromSql idParent
-         , postCount = fromSql count
-         }
-  , User { userID = fromSql idUser
-         , userName = fromSql name
-         , userEmail = fromSql email
-         }
-  )
+toPost [idPost, idUser, content, idParent, at, count, _, name, email] = ResolvedPost
+  Post { postID = fromSql idPost
+       , postContent = fromSql content
+       , postAt = fromSql at
+       , postUserID = fromSql idUser
+       , postParentID = fromSql idParent
+       , postCount = fromSql count
+       }
+  User { userID = fromSql idUser
+       , userName = fromSql name
+       , userEmail = fromSql email
+       }
 
 postQuery :: Int -> String -> [SqlValue] -> DatabaseM [ResolvedPost]
 postQuery limit whereClause args = fmap toPost <$> runQuery query (args ++ [toSql limit])

@@ -11,6 +11,7 @@ import Control.Monad.Reader (liftIO, ask)
 import Data.Text (Text)
 import Data.Time.Clock
 import Database.Internal
+import Types
 
 toUser :: [SqlValue] -> User
 toUser [idUser, name, email] =
@@ -59,7 +60,7 @@ createCode email = do
     Nothing -> return Nothing
     Just user -> do
       code <- newCode user
-      return (Just (code, user))
+      return (Just (ResolvedCode code user))
   where
     newCode user = do
       db <- ask

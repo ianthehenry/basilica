@@ -6,9 +6,9 @@ module Types (
   CodeRecord(..),
   TokenRecord(..),
   User(..),
-  ResolvedPost,
-  ResolvedCode,
-  ResolvedToken,
+  ResolvedPost(..),
+  ResolvedCode(..),
+  ResolvedToken(..),
   ID, EmailAddress,
   Token, Code
 ) where
@@ -52,9 +52,9 @@ data User = User { userID :: ID
                  , userEmail :: EmailAddress
                  }
 
-type ResolvedPost = (Post, User)
-type ResolvedCode = (CodeRecord, User)
-type ResolvedToken = (TokenRecord, User)
+data ResolvedPost = ResolvedPost Post User
+data ResolvedCode = ResolvedCode CodeRecord User
+data ResolvedToken = ResolvedToken TokenRecord User
 
 postPairs :: Post -> [Aeson.Pair]
 postPairs Post{..} = [ "id" .= postID
@@ -79,11 +79,11 @@ instance Aeson.ToJSON User where
     ]
 
 instance Aeson.ToJSON ResolvedPost where
-  toJSON (post@(Post{..}), user) = Aeson.object
+  toJSON (ResolvedPost post@(Post{..}) user) = Aeson.object
     ("user" .= user : postPairs post)
 
 instance Aeson.ToJSON ResolvedToken where
-  toJSON (TokenRecord{..}, user) = Aeson.object
+  toJSON (ResolvedToken TokenRecord{..} user) = Aeson.object
     [ "id" .= tokenID
     , "token" .= tokenValue
     , "user" .= user
