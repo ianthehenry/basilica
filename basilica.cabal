@@ -35,6 +35,15 @@ executable basilica
                , websockets ==0.9.*, wai-websockets, io-streams
                , wreq ==0.4.*
 
+  other-modules: Database
+               , Database.Internal
+               , Database.Posts
+               , Database.Users
+               , Mailer
+               , Routes
+               , Sockets
+               , Types
+
   default-extensions: OverloadedStrings
                     , NoImplicitPrelude
                     , TupleSections
