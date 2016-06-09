@@ -10,30 +10,35 @@ cabal-version:       >=1.10
 
 executable basilica
   main-is:             Main.hs
-  build-depends: DRBG ==0.5.*
-               , HDBC ==2.4.*
-               , HDBC-sqlite3 ==2.3.*
-               , aeson ==0.8.*
-               , base >=4.6 && <5.0, base-prelude
-               , base16-bytestring ==0.1.1.*
-               , bytestring ==0.10.6.*
-               , configurator ==0.3.*
-               , containers ==0.5.*
-               , cryptohash ==0.11.*
-               , filepath ==1.4.*
-               , http-types ==0.8.*
-               , mtl ==2.2.*, transformers
-               , random ==1.1.*
-               , scotty ==0.10.*
-               , suspend ==0.2.0.*
-               , text ==1.2.*
-               , time ==1.5.*
-               , timers ==0.2.*
-               , unix-time ==0.3.*
-               , wai ==3.0.*, case-insensitive
-               , warp ==3.*
-               , websockets ==0.9.*, wai-websockets, io-streams
-               , wreq ==0.4.*
+  build-depends: DRBG
+               , HDBC
+               , HDBC-sqlite3
+               , aeson
+               , base
+               , base-prelude
+               , base16-bytestring
+               , bytestring
+               , configurator
+               , containers
+               , cryptohash
+               , filepath
+               , http-types
+               , mtl
+               , transformers
+               , random
+               , scotty
+               , suspend
+               , text
+               , time
+               , timers
+               , unix-time
+               , wai
+               , case-insensitive
+               , warp
+               , websockets
+               , wai-websockets
+               , io-streams
+               , wreq
                , lens
                , http-client
 
