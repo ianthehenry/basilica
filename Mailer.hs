@@ -7,15 +7,17 @@ module Mailer (
 ) where
 
 import           BasePrelude
-import           Data.Aeson ((.=))
-import qualified Data.Aeson as Aeson
+import           Control.Lens ((?~))
+import           Data.ByteString
 import           Data.Text (Text)
+import qualified Data.Text as Text
 import           Network.Wreq
+import           Network.HTTP.Client (HttpException)
 
-data Mailer = Mailer { mailerKey :: Text }
+data Mailer = Mailer { mailerKey :: ByteString }
 
-newMailer :: Text -> Mailer
-newMailer key = Mailer { mailerKey = key }
+newMailer :: ByteString -> Mailer
+newMailer = Mailer
 
 data Email = Email { emailTo :: Text
                    , emailFromName :: Text
@@ -35,21 +37,19 @@ easyEmail to subject body =
         , emailBody = body
         }
 
-instance Aeson.ToJSON Email where
-  toJSON Email{..} = Aeson.object [ "auto_html" .= False
-                                  , "to" .= [Aeson.object ["email" .= emailTo]]
-                                  , "from_name" .= emailFromName
-                                  , "from_email" .= emailFromEmail
-                                  , "headers" .= Aeson.object ["Reply-To" .= emailReplyTo]
-                                  , "subject" .= emailSubject
-                                  , "text" .= emailBody
-                                  ]
+emailForm :: Email -> [FormParam]
+emailForm Email{..} = [ "to" := emailTo
+                      , "from" := Text.intercalate "" [emailFromName, " <", emailFromEmail, ">"]
+                      , "h:Reply-To" := emailReplyTo
+                      , "subject" := emailSubject
+                      , "text" := emailBody
+                      ]
 
 sendMail :: Mailer -> Email -> IO ()
-sendMail Mailer{mailerKey} email = do
-  post "https://mandrillapp.com/api/1.0/messages/send" (Aeson.toJSON body)
-  return ()
+sendMail Mailer{mailerKey} email = catch (void sendEmail) logError
   where
-    body = Aeson.object [ "message" .= email
-                        , "key" .= mailerKey
-                        ]
+    sendEmail = postWith opts "https://api.mailgun.net/v3/mail.basilica.horse/messages" form
+    logError :: HttpException -> IO ()
+    logError = print
+    opts = defaults & auth ?~ basicAuth "api" mailerKey
+    form = emailForm email

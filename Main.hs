@@ -211,8 +211,8 @@ main = do
   conf <- Conf.load [Conf.Required "conf"]
   port <- Conf.require conf "port"
   origin <- Conf.lookup conf "client-origin"
-  mandrillKey <- Conf.lookup conf "mandrill-key"
-  mailHandler <- case mandrillKey of
+  mailgunKey <- Conf.lookup conf "mailgun-key"
+  mailHandler <- case mailgunKey of
     Nothing -> return logCode
     Just key -> sendCodeMail (newMailer key) <$> Conf.require conf "client-url"
   db <- newDatabase =<< Conf.require conf "dbpath"

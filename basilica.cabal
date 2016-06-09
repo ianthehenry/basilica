@@ -34,6 +34,8 @@ executable basilica
                , warp ==3.*
                , websockets ==0.9.*, wai-websockets, io-streams
                , wreq ==0.4.*
+               , lens
+               , http-client
 
   other-modules: Database
                , Database.Internal
