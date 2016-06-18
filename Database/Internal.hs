@@ -51,7 +51,7 @@ insertRowRaw rawConn query args = withTransaction rawConn $ \conn -> do
     pure Nothing
   where
     tryInsert conn = catchJust isConstraintError
-      (run conn query args >> pure True)
+      (run conn query args $> True)
       (const $ pure False)
     isConstraintError SqlError{seNativeError = 19} = Just ()
     isConstraintError _ = Nothing

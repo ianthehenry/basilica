@@ -100,7 +100,7 @@ done :: ActionM [SideEffect]
 done = pure []
 
 send :: Response -> ActionM [SideEffect]
-send (NewPost p) = json p >> pure [SocketUpdate p]
+send (NewPost p) = json p $> [SocketUpdate p]
 send (ExistingPost p) = json p >> done
 send (PostList ps) = json ps >> done
 send (NewToken t) = json t >> done
