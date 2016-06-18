@@ -13,15 +13,12 @@ module Types (
   Token, Code
 ) where
 
-import           BasePrelude
+import           ClassyPrelude
 import qualified Crypto.Hash.MD5 as MD5
 import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Base16 as Hex
-import           Data.Text (Text)
-import qualified Data.Text.Encoding as Text
-import           Data.Time.Clock (UTCTime)
 
 data PostQuery = PostQuery { postQueryBefore :: Maybe ID
                            , postQueryAfter :: Maybe ID
@@ -65,11 +62,11 @@ postPairs Post{..} = [ "id" .= postID
                      ]
 
 instance Aeson.ToJSON Post where
-  toJSON post@(Post{..}) = Aeson.object
+  toJSON post@Post{..} = Aeson.object
     ("idUser" .= postUserID : postPairs post)
 
 gravatar :: Text -> Text
-gravatar = Text.decodeUtf8 . Hex.encode . MD5.hash . Text.encodeUtf8
+gravatar = decodeUtf8 . Hex.encode . MD5.hash . encodeUtf8
 
 instance Aeson.ToJSON User where
   toJSON User{..} = Aeson.object
@@ -79,7 +76,7 @@ instance Aeson.ToJSON User where
     ]
 
 instance Aeson.ToJSON ResolvedPost where
-  toJSON (ResolvedPost post@(Post{..}) user) = Aeson.object
+  toJSON (ResolvedPost post@Post{..} user) = Aeson.object
     ("user" .= user : postPairs post)
 
 instance Aeson.ToJSON ResolvedToken where

@@ -15,7 +15,7 @@ executable basilica
                , HDBC-sqlite3
                , aeson
                , base
-               , base-prelude
+               , classy-prelude
                , base16-bytestring
                , bytestring
                , configurator
@@ -41,6 +41,7 @@ executable basilica
                , wreq
                , lens
                , http-client
+               , lifted-base
 
   other-modules: Database
                , Database.Internal
@@ -53,7 +54,6 @@ executable basilica
 
   default-extensions: OverloadedStrings
                     , NoImplicitPrelude
-                    , TupleSections
                     , NamedFieldPuns
                     , RecordWildCards
 

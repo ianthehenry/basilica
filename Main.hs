@@ -1,14 +1,10 @@
 module Main (main) where
 
-import           BasePrelude hiding (app, intercalate)
-import           Control.Monad.Reader (runReaderT)
-import           Control.Monad.Trans (liftIO)
-import           Data.ByteString (ByteString)
+import           ClassyPrelude
+import           Control.Concurrent.Lifted
 import           Data.CaseInsensitive (original)
+import           Data.Char (isAlphaNum)
 import qualified Data.Configurator as Conf
-import qualified Data.Text as Strict
-import qualified Data.Text.Encoding as Strict
-import qualified Data.Text.IO as Text
 import qualified Data.Text.Lazy as Lazy
 import           Database
 import           Mailer
@@ -24,10 +20,10 @@ import           System.Random (getStdRandom, randomR)
 import           Web.Scotty
 
 maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
-maybeParam name = (Just <$> param name) `rescue` (return . const Nothing)
+maybeParam name = (Just <$> param name) `rescue` (pure . const Nothing)
 
 defaultParam :: Parsable a => Lazy.Text -> a -> ActionM a
-defaultParam name def = param name `rescue` (return . const def)
+defaultParam name def = param name `rescue` (pure . const def)
 
 validated :: Parsable a => (a -> Bool) -> Lazy.Text -> ActionM a -> ActionM a
 validated f errorMessage val = do
@@ -37,14 +33,14 @@ validated f errorMessage val = do
   else
     raise errorMessage
 
-maybeHeader :: HeaderName -> ActionM (Maybe Strict.Text)
-maybeHeader name = (listToMaybe . map (Strict.decodeUtf8 . snd)
+maybeHeader :: HeaderName -> ActionM (Maybe Text)
+maybeHeader name = (listToMaybe . map (decodeUtf8 . snd)
                    . filter ((== name) . fst) . Wai.requestHeaders) <$> request
 
-getHeader :: HeaderName -> ActionM Strict.Text
-getHeader name = maybe (raise message) return =<< maybeHeader name
+getHeader :: HeaderName -> ActionM Text
+getHeader name = maybe (raise message) pure =<< maybeHeader name
   where message = "missing \"" <> headerName <> "\" header"
-        headerName = (Lazy.fromStrict . Strict.decodeUtf8 . original) name
+        headerName = (fromStrict . decodeUtf8 . original) name
 
 route :: Database
       -> Chan (EmailAddress, Code)
@@ -54,11 +50,12 @@ route :: Database
       -> ScottyM ()
 route db emailChan socketChan path makeReq = path $ do
   reqOrRes <- makeReq
-  let dbRes = either return execute reqOrRes
+  let dbRes = either pure execute reqOrRes
   res <- liftIO (runReaderT dbRes db)
   effects <- send res
   mapM_ (liftIO . perform) effects
   where
+    perform :: SideEffect -> IO ()
     perform (SendEmail emailAddress code) =
       writeChan emailChan (emailAddress, code)
     perform (SocketUpdate p) =
@@ -70,42 +67,45 @@ simpleRoute :: Database
             -> (ActionM () -> ScottyM ())
             -> ActionM Request -> ScottyM ()
 simpleRoute db emailChan socketChan path makeReq = route db emailChan socketChan path $
-  (Right <$> makeReq) `rescue` (return . Left . BadRequest)
+  (Right <$> makeReq) `rescue` (pure . Left . BadRequest)
 
 execute :: Request -> DatabaseM Response
 execute (GetPost idPost) = maybe (PostNotFound idPost) ExistingPost <$> getPost idPost
 execute (ListPosts query) = PostList <$> getPosts query
-execute (CreatePost idParent token content) = do
-  maybeUser <- getUserByToken token
-  case maybeUser of
-    Nothing -> return BadToken
-    Just user -> maybe (PostNotFound $ fromJust idParent) NewPost
-                 <$> createPost user content idParent
+execute (CreatePost idParent token content) =
+  maybe (pure BadToken) makePost =<< getUserByToken token
+  where makePost user = do
+          maybePost <- createPost user content idParent
+          pure $ case (idParent, maybePost) of
+            (_, Just post) -> NewPost post
+            (Just idParent, Nothing) -> PostNotFound idParent
+            (Nothing, Nothing) -> error "creating top-level posts should never fail"
 execute (CreateCode emailAddress) =
   maybe UnknownEmail NewCode <$> createCode emailAddress
 execute (CreateToken code) =
-  maybe (return BadCode) (fmap NewToken . withUser) =<< createToken code
-  where withUser token@TokenRecord{tokenUserID} =
-          ResolvedToken token . fromJust <$> getUser tokenUserID
-execute (CreateUser email name) = do
-  maybeUser <- createUser email name
-  case maybeUser of
-    Nothing -> return ExistingNameOrEmail
-    Just User{userEmail} -> NewUser . fromJust <$> createCode userEmail
+  maybe (pure BadCode) (fmap NewToken . withUser) =<< createToken code
+  where
+    noUser = error "we created a token but then couldn't find the user"
+    withUser token@TokenRecord{tokenUserID} =
+      maybe noUser (ResolvedToken token) <$> getUser tokenUserID
+execute (CreateUser email name) =
+  maybe (pure ExistingNameOrEmail) withCode =<< createUser email name
+  where withCode User{userEmail} = maybe noCode NewUser <$> createCode userEmail
+        noCode = error "failed to create code for new user"
 
 data SideEffect = SendEmail EmailAddress Code
                 | SocketUpdate ResolvedPost
 
 done :: ActionM [SideEffect]
-done = return []
+done = pure []
 
 send :: Response -> ActionM [SideEffect]
-send (NewPost p) = json p >> return [SocketUpdate p]
+send (NewPost p) = json p >> pure [SocketUpdate p]
 send (ExistingPost p) = json p >> done
 send (PostList ps) = json ps >> done
 send (NewToken t) = json t >> done
 send (NewUser resolvedCode@(ResolvedCode _ user)) = json user >> send (NewCode resolvedCode)
-send (NewCode (ResolvedCode code user)) = return [SendEmail (userEmail user)
+send (NewCode (ResolvedCode code user)) = pure [SendEmail (userEmail user)
                                                             (codeValue code)]
 send BadToken = status status401 >> text "invalid token" >> done
 send BadCode = status status401 >> text "invalid code" >> done
@@ -129,7 +129,7 @@ basilica :: Maybe ByteString
          -> IO Application
 basilica origin db emailChan socketChan = scottyApp $ do
   case origin of
-    Nothing -> return ()
+    Nothing -> pure ()
     Just o -> do
       middleware (addHeaders [("Access-Control-Allow-Origin", o)])
       addroute OPTIONS (function $ const $ Just []) $ do
@@ -158,13 +158,11 @@ basilica origin db emailChan socketChan = scottyApp $ do
     if isValidName name then
       (fmap Right . CreateUser) <$> param "email" <*> pure name
     else
-      return (Left InvalidUsername)
+      pure (Left InvalidUsername)
 
-isValidName :: Strict.Text -> Bool
-isValidName name =
-  all isAlphaNum (Strict.unpack name)
-  && (len >= 2) && (len < 20)
-  where len = Strict.length name
+isValidName :: Text -> Bool
+isValidName name = all isAlphaNum name && (len >= 2) && (len < 20)
+  where len = length name
 
 addHeaders :: ResponseHeaders -> Wai.Middleware
 addHeaders newHeaders app req respond = app req $ \response -> do
@@ -172,8 +170,8 @@ addHeaders newHeaders app req respond = app req $ \response -> do
   streamHandle $ \streamBody ->
     respond $ Wai.responseStream st (currentHeaders ++ newHeaders) streamBody
 
-randomSubject :: IO Strict.Text
-randomSubject = (subjects !!) <$> getStdRandom (randomR (0, length subjects - 1))
+randomSubject :: IO Text
+randomSubject = (subjects `indexEx`) <$> getStdRandom (randomR (0, length subjects - 1))
   where subjects = [ "Hey Beautiful"
                    , "Hey Baby"
                    , "Hey Hon"
@@ -186,11 +184,11 @@ randomSubject = (subjects !!) <$> getStdRandom (randomR (0, length subjects - 1)
                    , "Hey Syruptoes"
                    ]
 
-sendCodeMail :: Mailer -> Strict.Text -> (EmailAddress, Code) -> IO ()
+sendCodeMail :: Mailer -> Text -> (EmailAddress, Code) -> IO ()
 sendCodeMail mailer clientUrl (to, code) = do
   subject <- randomSubject
   sendMail mailer (easyEmail to subject messageBody)
-  where messageBody = Strict.intercalate "\n"
+  where messageBody = intercalate "\n"
                       [ "Here's your Basilicode:"
                       , ""
                       , code
@@ -204,7 +202,7 @@ sendCodeMail mailer clientUrl (to, code) = do
                       ]
 
 logCode :: (EmailAddress, Code) -> IO ()
-logCode (to, code) = Text.putStrLn (Strict.intercalate ": " [to, code])
+logCode (to, code) = putStrLn (intercalate ": " [to, code])
 
 main :: IO ()
 main = do
@@ -213,13 +211,13 @@ main = do
   origin <- Conf.lookup conf "client-origin"
   mailgunKey <- Conf.lookup conf "mailgun-key"
   mailHandler <- case mailgunKey of
-    Nothing -> return logCode
+    Nothing -> pure logCode
     Just key -> sendCodeMail (newMailer key) <$> Conf.require conf "client-url"
   db <- newDatabase =<< Conf.require conf "dbpath"
   emailChan <- newChan
   socketChan <- newChan
   server <- Sockets.newServer socketChan
   api <- basilica origin db emailChan socketChan
-  forkIO $ getChanContents emailChan >>= mapM_ mailHandler
-  putStrLn $ "Running on port " ++ show port
+  _ <- fork $ getChanContents emailChan >>= mapM_ mailHandler
+  putStrLn $ "Running on port " ++ tshow port
   Warp.run port (websocketsOr defaultConnectionOptions server api)

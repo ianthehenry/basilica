@@ -1,7 +1,6 @@
 module Routes (Request(..), Response(..)) where
 
-import           BasePrelude
-import           Data.Text (Text)
+import           ClassyPrelude
 import qualified Data.Text.Lazy as Lazy
 import           Types
 

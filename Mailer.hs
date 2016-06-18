@@ -6,13 +6,10 @@ module Mailer (
   newMailer
 ) where
 
-import           BasePrelude
-import           Control.Lens ((?~))
-import           Data.ByteString
-import           Data.Text (Text)
-import qualified Data.Text as Text
-import           Network.Wreq
-import           Network.HTTP.Client (HttpException)
+import ClassyPrelude
+import Control.Lens ((?~), (&))
+import Network.Wreq
+import Network.HTTP.Client (HttpException)
 
 data Mailer = Mailer { mailerKey :: ByteString }
 
@@ -39,7 +36,7 @@ easyEmail to subject body =
 
 emailForm :: Email -> [FormParam]
 emailForm Email{..} = [ "to" := emailTo
-                      , "from" := Text.intercalate "" [emailFromName, " <", emailFromEmail, ">"]
+                      , "from" := intercalate "" [emailFromName, " <", emailFromEmail, ">"]
                       , "h:Reply-To" := emailReplyTo
                       , "subject" := emailSubject
                       , "text" := emailBody

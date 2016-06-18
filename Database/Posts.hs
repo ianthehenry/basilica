@@ -4,10 +4,7 @@ module Database.Posts (
   getPost,
 ) where
 
-import BasePrelude
-import Control.Monad.Reader (liftIO)
-import Data.Text (Text)
-import Data.Time.Clock (getCurrentTime, UTCTime)
+import ClassyPrelude
 import Database.Internal
 import Types
 
@@ -58,7 +55,7 @@ getPosts PostQuery{..} =
 
 insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
 insertPost User{userID = idUser} content idParent at =
-  insertRow query args >>= maybe (return Nothing) getPost
+  insertRow query args >>= maybe (pure Nothing) getPost
   where
     query = unlines [ "insert into posts"
                     , "(id_user, content, id_parent, at)"

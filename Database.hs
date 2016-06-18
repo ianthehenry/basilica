@@ -5,7 +5,7 @@ module Database (
   Database(..)
 ) where
 
-import BasePrelude
+import ClassyPrelude
 import Crypto.Random.DRBG
 import Database.HDBC.Sqlite3 (connectSqlite3)
 import Database.Internal
@@ -19,6 +19,6 @@ newDatabase path = do
   runRaw conn "COMMIT; PRAGMA foreign_keys = ON; BEGIN TRANSACTION;"
   rng <- newGenIO :: IO HashDRBG
   rngSlot <- newMVar rng
-  return Database { dbConn = conn
-                  , dbRNG = rngSlot
-                  }
+  pure Database { dbConn = conn
+                , dbRNG = rngSlot
+                }
