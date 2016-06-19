@@ -5,7 +5,6 @@ import           Control.Concurrent.Lifted
 import           Data.CaseInsensitive (original)
 import           Data.Char (isAlphaNum)
 import qualified Data.Configurator as Conf
-import qualified Data.Text.Lazy as Lazy
 import           Database
 import           Mailer
 import           Network.HTTP.Types
@@ -19,13 +18,13 @@ import qualified Sockets
 import           System.Random (getStdRandom, randomR)
 import           Web.Scotty
 
-maybeParam :: Parsable a => Lazy.Text -> ActionM (Maybe a)
+maybeParam :: Parsable a => LText -> ActionM (Maybe a)
 maybeParam name = (Just <$> param name) `rescue` (pure . const Nothing)
 
-defaultParam :: Parsable a => Lazy.Text -> a -> ActionM a
+defaultParam :: Parsable a => LText -> a -> ActionM a
 defaultParam name def = param name `rescue` (pure . const def)
 
-validated :: Parsable a => (a -> Bool) -> Lazy.Text -> ActionM a -> ActionM a
+validated :: Parsable a => (a -> Bool) -> LText -> ActionM a -> ActionM a
 validated f errorMessage val = do
   inner <- val
   if f inner then
@@ -113,7 +112,7 @@ send InvalidUsername = status status400 *> text "invalid username" *> done
 send ExistingNameOrEmail = status status409 *> text "username or email address taken" *> done
 send (BadRequest message) = status status400 *> text message *> done
 send (PostNotFound idPost) = status status404 *> text message *> done
-  where message = mconcat ["post ", tshow idPost, " not found"]
+  where message = mconcat ["post ", tlshow idPost, " not found"]
 
 isLegalLimit :: Int -> Bool
 isLegalLimit x

@@ -1,8 +1,7 @@
 module Routes (Request(..), Response(..)) where
 
-import           ClassyPrelude
-import qualified Data.Text.Lazy as Lazy
-import           Types
+import ClassyPrelude
+import Types
 
 type Name = Text
 
@@ -24,5 +23,5 @@ data Response = NewPost ResolvedPost
               | UnknownEmail
               | InvalidUsername
               | ExistingNameOrEmail
-              | BadRequest Lazy.Text
+              | BadRequest LText
               | PostNotFound ID
