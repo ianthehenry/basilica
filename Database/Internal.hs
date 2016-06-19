@@ -9,14 +9,13 @@ module Database.Internal (
   insertRowRaw
 ) where
 
-import           ClassyPrelude
-import           Control.Monad.Reader (ReaderT, liftIO, ask)
-import           Crypto.Random.DRBG (genBytes, HashDRBG)
-import           Data.ByteString.Base16 as BS (encode)
-import           Database.HDBC as X (SqlError(..), run, runRaw, withTransaction, quickQuery')
-import           Database.HDBC.SqlValue as X (SqlValue, fromSql, toSql)
-import           Database.HDBC.Sqlite3 (Connection)
-import           Types as X
+import ClassyPrelude
+import Crypto.Random.DRBG (genBytes, HashDRBG)
+import Data.ByteString.Base16 as BS (encode)
+import Database.HDBC as X (SqlError(..), run, runRaw, withTransaction, quickQuery')
+import Database.HDBC.SqlValue as X (SqlValue, fromSql, toSql)
+import Database.HDBC.Sqlite3 (Connection)
+import Types as X
 
 data Database = Database { dbConn :: Connection
                          , dbRNG :: MVar HashDRBG
