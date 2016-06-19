@@ -101,20 +101,19 @@ done = pure []
 
 send :: Response -> ActionM [SideEffect]
 send (NewPost p) = json p $> [SocketUpdate p]
-send (ExistingPost p) = json p >> done
-send (PostList ps) = json ps >> done
-send (NewToken t) = json t >> done
-send (NewUser resolvedCode@(ResolvedCode _ user)) = json user >> send (NewCode resolvedCode)
-send (NewCode (ResolvedCode code user)) = pure [SendEmail (userEmail user)
-                                                            (codeValue code)]
-send BadToken = status status401 >> text "invalid token" >> done
-send BadCode = status status401 >> text "invalid code" >> done
-send UnknownEmail = status status200 >> done
-send InvalidUsername = status status400 >> text "invalid username" >> done
-send ExistingNameOrEmail = status status409 >> text "username or email address taken" >> done
-send (BadRequest message) = status status400 >> text message >> done
-send (PostNotFound idPost) = status status404 >> text message >> done
-  where message = mconcat ["post ", (Lazy.pack . show) idPost, " not found"]
+send (ExistingPost p) = json p *> done
+send (PostList ps) = json ps *> done
+send (NewToken t) = json t *> done
+send (NewUser resolvedCode@(ResolvedCode _ user)) = json user *> send (NewCode resolvedCode)
+send (NewCode (ResolvedCode code user)) = pure [SendEmail (userEmail user) (codeValue code)]
+send BadToken = status status401 *> text "invalid token" *> done
+send BadCode = status status401 *> text "invalid code" *> done
+send UnknownEmail = status status200 *> done
+send InvalidUsername = status status400 *> text "invalid username" *> done
+send ExistingNameOrEmail = status status409 *> text "username or email address taken" *> done
+send (BadRequest message) = status status400 *> text message *> done
+send (PostNotFound idPost) = status status404 *> text message *> done
+  where message = mconcat ["post ", tshow idPost, " not found"]
 
 isLegalLimit :: Int -> Bool
 isLegalLimit x
