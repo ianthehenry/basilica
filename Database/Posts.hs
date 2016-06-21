@@ -1,67 +1,62 @@
-module Database.Posts (
-  createPost,
-  getPosts,
-  getPost,
+module Database.Posts
+( createPost
+, getPosts
+, getPost
 ) where
 
-import ClassyPrelude
+import ClassyPrelude hiding (groupBy, on)
+import Database.Esqueleto
 import Database.Internal
-import Types
+import Database.Schema
 
-toPost :: [SqlValue] -> ResolvedPost
-toPost [idPost, idUser, content, idParent, at, count, _, name, email] = ResolvedPost
-  Post { postID = fromSql idPost
-       , postContent = fromSql content
-       , postAt = fromSql at
-       , postUserID = fromSql idUser
-       , postParentID = fromSql idParent
-       , postCount = fromSql count
-       }
-  User { userID = fromSql idUser
-       , userName = fromSql name
-       , userEmail = fromSql email
-       }
+toResolvedPost :: (Entity PostRow, Value Int, Entity UserRow) -> ResolvedPost
+toResolvedPost (postEntity, childCount, userEntity) = ResolvedPost post user
+  where
+    postRow = entityVal postEntity
+    userRow = entityVal userEntity
+    post = Post { postID = getID postEntity
+                , postUserID = asInt (postRowUserId postRow)
+                , postContent = postRowContent postRow
+                , postAt = postRowAt postRow
+                , postParentID = asInt <$> postRowParentId postRow
+                , postCount = unValue childCount
+                }
+    user = User { userID = getID userEntity
+                , userName = userRowName userRow
+                , userEmail = userRowEmail userRow
+                }
 
-postQuery :: Int -> String -> [SqlValue] -> DatabaseM [ResolvedPost]
-postQuery limit whereClause args = fmap toPost <$> runQuery query (args ++ [toSql limit])
-  where query = unlines [ "select posts.*, count(children.id), users.* from posts"
-                        , "left outer join posts as children"
-                        , "  on children.id_parent = posts.id"
-                        , "inner join users on users.id = posts.id_user"
-                        , whereClause
-                        , "group by posts.id"
-                        , "order by posts.id desc"
-                        , "limit ?"
-                        ]
+postQuery :: (SqlExpr (Entity PostRow) -> SqlQuery ()) -> DatabaseM [ResolvedPost]
+postQuery customClause = fmap toResolvedPost <$> runQuery query
+  where query = select $ from $ \((post `LeftOuterJoin` child) `InnerJoin` user) -> do
+          on $ (user ^. UserRowId) ==. (post ^. PostRowUserId)
+          on $ (child ^. PostRowParentId) ==. just (post ^. PostRowId)
+          customClause post
+          groupBy (post ^. PostRowId)
+          orderBy [desc $ post ^. PostRowId]
+          pure (post, count (child ^. PostRowId), user)
 
-getPost :: ID -> DatabaseM (Maybe ResolvedPost)
-getPost idPost = listToMaybe <$>
-  postQuery 1 "where posts.id = ?" [toSql idPost]
+getPostByKey :: PostRowId -> DatabaseM (Maybe ResolvedPost)
+getPostByKey idPost = listToMaybe <$> postQuery (\post -> where_ $ post ^. PostRowId ==. val idPost)
+
+getPost :: Int -> DatabaseM (Maybe ResolvedPost)
+getPost = getPostByKey . fromInt
 
 getPosts :: PostQuery -> DatabaseM [ResolvedPost]
-getPosts PostQuery{..} =
-  postQuery postQueryLimit query args
-  where
-    args = toSql <$> catMaybes (snd <$> components)
-    query = case queryComponents of
-      [] -> ""
-      xs -> "where " <> intercalate " and " xs
-    queryComponents = catMaybes (makeWhereClause <$> components)
-    makeWhereClause (_, Nothing) = Nothing
-    makeWhereClause (x, _) = Just x
-    components = [ ("posts.id > ?", postQueryAfter)
-                 , ("posts.id < ?", postQueryBefore)
-                 ]
+getPosts PostQuery{..} = postQuery $ \post -> do
+  maybe (pure ()) (\a -> where_ (post ^. PostRowId >. val a)) (fromInt <$> postQueryAfter)
+  maybe (pure ()) (\b -> where_ (post ^. PostRowId <. val b)) (fromInt <$> postQueryBefore)
+  limit (fromIntegral postQueryLimit)
 
 insertPost :: User -> Text -> Maybe ID -> UTCTime -> DatabaseM (Maybe ResolvedPost)
-insertPost User{userID = idUser} content idParent at =
-  insertRow query args >>= maybe (pure Nothing) getPost
-  where
-    query = unlines [ "insert into posts"
-                    , "(id_user, content, id_parent, at)"
-                    , "values (?, ?, ?, ?)"
-                    ]
-    args = [toSql idUser, toSql content, toSql idParent, toSql at]
+insertPost User{userID = idUser} content idParent at = do
+  key <- runInsert postRow
+  maybe (pure Nothing) getPostByKey key
+  where postRow = PostRow { postRowUserId = fromInt idUser
+                          , postRowContent = content
+                          , postRowParentId = fromInt <$> idParent
+                          , postRowAt = at
+                          }
 
 createPost :: User -> Text -> Maybe ID -> DatabaseM (Maybe ResolvedPost)
 createPost user content parentID =

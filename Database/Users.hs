@@ -1,56 +1,53 @@
-module Database.Users (
-  createCode,
-  createToken,
-  getUser,
-  createUser,
-  getUserByToken
+module Database.Users
+( createCode
+, createToken
+, getUser
+, createUser
+, getUserByToken
 ) where
 
-import ClassyPrelude
-import Data.Maybe (fromJust)
-import Database.Internal
+import ClassyPrelude hiding (on)
+import Control.Monad.Reader (asks)
 import Data.Time.Clock (diffUTCTime)
-import Types
+import Database.Esqueleto hiding (Connection)
+import Database.Internal
+import Database.Schema
 
-toUser :: [SqlValue] -> User
-toUser [idUser, name, email] =
-  User { userID = fromSql idUser
-       , userName = fromSql name
-       , userEmail = fromSql email
-       }
+toUser :: Entity UserRow -> User
+toUser userEntity = User { userID = getID userEntity
+                         , userName = userRowName userRow
+                         , userEmail = userRowEmail userRow
+                         }
+  where userRow = entityVal userEntity
 
 getUserByEmail :: EmailAddress -> DatabaseM (Maybe User)
-getUserByEmail email =
-  listToMaybe . fmap toUser <$> runQuery query [toSql email]
-  where query = "select * from users where email = ?"
+getUserByEmail email = getOne toUser query
+  where query = select $ from $ \user -> do
+          where_ $ user ^. UserRowEmail ==. val email
+          pure user
 
 getUser :: ID -> DatabaseM (Maybe User)
-getUser idUser =
-  listToMaybe . fmap toUser <$> runQuery query [toSql idUser]
-  where query = "select * from users where id = ?"
+getUser idUser = getOne toUser query
+  where query = select $ from $ \user -> do
+          where_ $ user ^. UserRowId ==. val (fromInt idUser)
+          pure user
 
 getUserByToken :: Token -> DatabaseM (Maybe User)
-getUserByToken token = listToMaybe . fmap toUser <$> runQuery query [toSql token]
-  where
-    query = unlines [ "select users.* from tokens"
-                    , "inner join users on tokens.id_user = users.id"
-                    , "where token = ?"
-                    ]
-
-saneSql :: Bool -> SqlValue
-saneSql True = toSql (1 :: Int)
-saneSql False = toSql (0 :: Int)
+getUserByToken x = getOne toUser query
+  where query = select $ from $ \(token `InnerJoin` user) -> do
+          on $ (token ^. TokenRowUserId) ==. (user ^. UserRowId)
+          where_ $ token ^. TokenRowToken ==. val x
+          pure user
 
 insertCode :: CodeRecord -> DatabaseM ID
-insertCode CodeRecord{..} =
-  fromJust <$> insertRow query args
+insertCode CodeRecord{..} = asInt <$> runQuery query
   where
-    query = unlines [ "insert into codes"
-                    , "(code, generated_at, valid, id_user)"
-                    , "values (?, ?, ?, ?)"
-                    ]
-    args = [ toSql codeValue, toSql codeGeneratedAt
-           , saneSql codeValid, toSql codeUserID ]
+    query = insert codeRow
+    codeRow = CodeRow { codeRowCode = codeValue
+                      , codeRowGeneratedAt = codeGeneratedAt
+                      , codeRowValid = codeValid
+                      , codeRowUserId = fromInt codeUserID
+                      }
 
 createCode :: EmailAddress -> DatabaseM (Maybe ResolvedCode)
 createCode email = do
@@ -62,15 +59,15 @@ createCode email = do
       pure (Just (ResolvedCode code user))
   where
     newCode user = do
-      db <- ask
+      rng <- asks dbRNG
       now <- liftIO getCurrentTime
-      codeValue <- liftIO (secureRandom db)
+      codeValue <- liftIO (secureRandom rng)
       let code = CodeRecord { codeValue = codeValue
                             , codeGeneratedAt = now
                             , codeValid = True
                             , codeUserID = userID user
                             }
-      insertCode code
+      _ <- insertCode code
       pure code
 
 isCodeValidAt :: CodeRecord -> UTCTime -> Bool
@@ -79,44 +76,44 @@ isCodeValidAt CodeRecord{codeValid = True, codeGeneratedAt} at =
   diffUTCTime at codeGeneratedAt < oneHour
   where oneHour = 60 * 60
 
-toCodeRecord :: [SqlValue] -> CodeRecord
-toCodeRecord [code, at, valid, idUser] =
-  CodeRecord { codeValue = fromSql code
-             , codeGeneratedAt = fromSql at
-             , codeValid = fromSql valid
-             , codeUserID = fromSql idUser
+toCodeRecord :: Entity CodeRow -> CodeRecord
+toCodeRecord codeEntity =
+  CodeRecord { codeValue = codeRowCode codeRow
+             , codeGeneratedAt = codeRowGeneratedAt codeRow
+             , codeValid = codeRowValid codeRow
+             , codeUserID = asInt (codeRowUserId codeRow)
              }
+  where codeRow = entityVal codeEntity
 
 findCode :: Code -> DatabaseM (Maybe CodeRecord)
-findCode code =
-  listToMaybe . fmap toCodeRecord <$> runQuery query [toSql code]
-  where query = "select * from codes where code = ?"
+findCode x = getOne toCodeRecord query
+  where query = select $ from $ \code -> do
+          where_ $ code ^. CodeRowCode ==. val x
+          pure code
 
-insertToken :: Connection -> Text -> CodeRecord -> IO TokenRecord
-insertToken conn token CodeRecord{..} = do
-  idToken <- fromJust <$> insertRowRaw conn query [toSql token, toSql codeUserID]
-  pure TokenRecord { tokenID = idToken
+insertToken :: MonadIO m => Text -> CodeRecord -> SqlPersistT m TokenRecord
+insertToken token CodeRecord{..} = do
+  idToken <- insert tokenRow
+  pure TokenRecord { tokenID = asInt idToken
                    , tokenValue = token
                    , tokenUserID = codeUserID
                    }
-  where
-    query = "insert into tokens (token, id_user) values (?, ?)"
+  where tokenRow = TokenRow { tokenRowToken = token
+                            , tokenRowUserId = fromInt codeUserID
+                            }
 
-invalidateCode :: Connection -> CodeRecord -> IO ()
-invalidateCode conn CodeRecord{codeValue} = do
-  rowCount <- run conn query args
-  assert (rowCount == 1) pure ()
-  where
-    query = "update codes set valid = 0 where code = ?"
-    args = [toSql codeValue]
+invalidateCode :: MonadIO m => CodeRecord -> SqlPersistT m ()
+invalidateCode CodeRecord{codeValue} = do
+  rowCount <- updateCount $ \code -> do
+    set code [CodeRowValid =. val False]
+    where_ $ code ^. CodeRowCode ==. val codeValue
+  assert (rowCount == 1) (pure ())
 
 convertCodeToToken :: CodeRecord -> DatabaseM TokenRecord
 convertCodeToToken code = do
-  db <- ask
-  liftIO $ withTransaction (dbConn db) $ \conn -> do
-    invalidateCode conn code
-    token <- secureRandom db
-    insertToken conn token code
+  rng <- asks dbRNG
+  token <- liftIO (secureRandom rng)
+  runQuery (invalidateCode code *> insertToken token code)
 
 createToken :: Code -> DatabaseM (Maybe TokenRecord)
 createToken code = do
@@ -131,12 +128,14 @@ createToken code = do
 
 createUser :: EmailAddress -> Text -> DatabaseM (Maybe User)
 createUser email name = do
-  idUserMaybe <- insertRow query [toSql email, toSql name]
+  idUserMaybe <- runInsert userRow
   case idUserMaybe of
     Nothing -> pure Nothing
-    Just idUser -> pure $ Just User { userID = idUser
+    Just idUser -> pure $ Just User { userID = asInt idUser
                                     , userEmail = email
                                     , userName = name
                                     }
   where
-    query = "insert into users (email, name) values (?, ?)"
+    userRow = UserRow { userRowName = name
+                      , userRowEmail = email
+                      }

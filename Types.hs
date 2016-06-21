@@ -19,6 +19,7 @@ import           Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Base16 as Hex
+import           Database.Schema (PostRowId, EmailAddress, Token)
 
 data PostQuery = PostQuery { postQueryBefore :: Maybe ID
                            , postQueryAfter :: Maybe ID
@@ -87,6 +88,4 @@ instance Aeson.ToJSON ResolvedToken where
     ]
 
 type ID = Int
-type EmailAddress = Text
-type Token = Text
 type Code = Text

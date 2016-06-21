@@ -1,56 +1,58 @@
-module Database.Internal (
-  module X,
-  Connection,
-  Database(..),
-  DatabaseM,
-  secureRandom,
-  runQuery,
-  insertRow,
-  insertRowRaw
+{-# LANGUAGE TypeFamilies, FlexibleContexts #-}
+
+module Database.Internal
+( module X
+, Database(..)
+, DatabaseM
+, secureRandom
+, asInt
+, getID
+, fromInt
+, runInsert
+, runQuery
+, getOne
 ) where
 
 import ClassyPrelude
+import Control.Monad.Reader (asks)
+import Control.Monad.Trans.Control
 import Crypto.Random.DRBG (genBytes, HashDRBG)
 import Data.ByteString.Base16 as BS (encode)
-import Database.HDBC as X (SqlError(..), run, runRaw, withTransaction, quickQuery')
-import Database.HDBC.SqlValue as X (SqlValue, fromSql, toSql)
-import Database.HDBC.Sqlite3 (Connection)
+import Database.Persist
+import Database.Persist.Sql
+import Database.Sqlite (SqliteException(..), Error(..))
 import Types as X
 
-data Database = Database { dbConn :: Connection
+
+data Database = Database { dbPool :: ConnectionPool
                          , dbRNG :: MVar HashDRBG
                          }
 
 type DatabaseM a = ReaderT Database IO a
 
-runQuery :: String -> [SqlValue] -> DatabaseM [[SqlValue]]
-runQuery query args = do
-  Database{dbConn} <- ask
-  liftIO (quickQuery' dbConn query args)
-
-secureRandom :: Database -> IO Text
-secureRandom Database{dbRNG} = do
-  bytes <- modifyMVar dbRNG $ \gen ->
+secureRandom :: MVar HashDRBG -> IO Text
+secureRandom rng = do
+  bytes <- modifyMVar rng $ \gen ->
     let Right (randomBytes, newGen) = genBytes 16 gen in
       pure (newGen, randomBytes)
   pure $ (decodeUtf8 . BS.encode) bytes
 
-insertRow :: String -> [SqlValue] -> DatabaseM (Maybe ID)
-insertRow query args = do
-  Database{dbConn} <- ask
-  liftIO (insertRowRaw dbConn query args)
+asInt :: PersistEntity a => Key a -> Int
+asInt key = let [PersistInt64 x] = keyToValues key in fromIntegral x
 
-insertRowRaw :: Connection -> String -> [SqlValue] -> IO (Maybe ID)
-insertRowRaw rawConn query args = withTransaction rawConn $ \conn -> do
-  inserted <- tryInsert conn
-  if inserted then do
-    [[rowid]] <- quickQuery' conn "select last_insert_rowid()" []
-    (pure . Just . fromSql) rowid
-  else
-    pure Nothing
-  where
-    tryInsert conn = catchJust isConstraintError
-      (run conn query args $> True)
-      (const $ pure False)
-    isConstraintError SqlError{seNativeError = 19} = Just ()
-    isConstraintError _ = Nothing
+getID :: PersistEntity a => Entity a -> Int
+getID = asInt . entityKey
+
+fromInt :: PersistEntity a => Int -> Key a
+fromInt key = let Right x = keyFromValues [PersistInt64 (fromIntegral key)] in x
+
+runInsert :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => a -> DatabaseM (Maybe (Key a))
+runInsert entity = (Just <$> runQuery (insert entity)) `catch` swallowConstraintError
+  where swallowConstraintError SqliteException{seError = ErrorConstraint} = pure Nothing
+        swallowConstraintError e = throwM e
+
+runQuery :: (MonadIO m, MonadReader Database m, MonadBaseControl IO m) => SqlPersistT m a -> m a
+runQuery query = runSqlPool query =<< asks dbPool
+
+getOne :: (MonadIO m, MonadReader Database m, MonadBaseControl IO m) => (a -> b) -> SqlPersistT m [a] -> m (Maybe b)
+getOne f query = fmap f . listToMaybe <$> runQuery query
