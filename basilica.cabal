@@ -11,8 +11,6 @@ cabal-version:       >=1.10
 executable basilica
   main-is:             Main.hs
   build-depends: DRBG
-               , HDBC
-               , HDBC-sqlite3
                , aeson
                , base
                , classy-prelude
@@ -42,11 +40,18 @@ executable basilica
                , lens
                , http-client
                , lifted-base
+               , persistent-sqlite
+               , persistent
+               , persistent-template
+               , monad-logger
+               , esqueleto
+               , monad-control
 
   other-modules: Database
                , Database.Internal
                , Database.Posts
                , Database.Users
+               , Database.Schema
                , Mailer
                , Routes
                , Sockets

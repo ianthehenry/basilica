@@ -2,6 +2,7 @@ module Main (main) where
 
 import           ClassyPrelude
 import           Control.Concurrent.Lifted
+import           Control.Monad.Logger (runStderrLoggingT)
 import           Data.CaseInsensitive (original)
 import           Data.Char (isAlphaNum)
 import qualified Data.Configurator as Conf
@@ -211,11 +212,14 @@ main = do
   mailHandler <- case mailgunKey of
     Nothing -> pure logCode
     Just key -> sendCodeMail (newMailer key) <$> Conf.require conf "client-url"
-  db <- newDatabase =<< Conf.require conf "dbpath"
   emailChan <- newChan
   socketChan <- newChan
   server <- Sockets.newServer socketChan
-  api <- basilica origin db emailChan socketChan
   _ <- fork $ getChanContents emailChan >>= mapM_ mailHandler
-  putStrLn $ "Running on port " ++ tshow port
-  Warp.run port (websocketsOr defaultConnectionOptions server api)
+
+  dbPath <- Conf.require conf "dbpath"
+  runStderrLoggingT $ withDatabase dbPath $ \db ->
+    liftIO $ do
+      api <- basilica origin db emailChan socketChan
+      putStrLn $ "Running on port " ++ tshow port
+      Warp.run port (websocketsOr defaultConnectionOptions server api)
