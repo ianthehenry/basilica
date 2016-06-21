@@ -1,6 +1,6 @@
 CREATE TABLE posts (
   id INTEGER PRIMARY KEY NOT NULL,
-  id_user TEXT NOT NULL REFERENCES users(id),
+  id_user INTEGER NOT NULL REFERENCES users(id),
   content TEXT NOT NULL,
   id_parent INTEGER NULL REFERENCES posts(id),
   at TEXT NOT NULL
