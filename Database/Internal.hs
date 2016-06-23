@@ -30,9 +30,10 @@ data Database = Database { dbPool :: ConnectionPool
 
 type DatabaseM a = ReaderT Database IO a
 
-secureRandom :: MVar HashDRBG -> IO Text
-secureRandom rng = do
-  bytes <- modifyMVar rng $ \gen ->
+secureRandom :: DatabaseM Text
+secureRandom = do
+  rng <- asks dbRNG
+  bytes <- liftIO $ modifyMVar rng $ \gen ->
     let Right (randomBytes, newGen) = genBytes 16 gen in
       pure (newGen, randomBytes)
   pure $ (decodeUtf8 . BS.encode) bytes
