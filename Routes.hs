@@ -1,4 +1,7 @@
-module Routes (Request(..), Response(..)) where
+module Routes
+( Request(..)
+, Response(..)
+) where
 
 import ClassyPrelude
 import Types

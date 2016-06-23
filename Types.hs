@@ -1,14 +1,16 @@
-module Types (
-  Post(..),
-  PostQuery(..),
-  CodeRecord(..),
-  TokenRecord(..),
-  User(..),
-  ResolvedPost(..),
-  ResolvedCode(..),
-  ResolvedToken(..),
-  ID, EmailAddress,
-  Token, Code
+module Types
+( Post(..)
+, PostQuery(..)
+, CodeRecord(..)
+, TokenRecord(..)
+, User(..)
+, ResolvedPost(..)
+, ResolvedCode(..)
+, ResolvedToken(..)
+, ID
+, EmailAddress
+, Token
+, Code
 ) where
 
 import           ClassyPrelude

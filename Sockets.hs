@@ -1,6 +1,6 @@
-module Sockets (
-  newServer,
-  Broadcaster
+module Sockets
+( newServer
+, Broadcaster
 ) where
 
 import           ClassyPrelude

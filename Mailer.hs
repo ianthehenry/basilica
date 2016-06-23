@@ -1,9 +1,9 @@
-module Mailer (
-  Email(..),
-  sendMail,
-  easyEmail,
-  Mailer,
-  newMailer
+module Mailer
+( Email(..)
+, sendMail
+, easyEmail
+, Mailer
+, newMailer
 ) where
 
 import ClassyPrelude
