@@ -18,9 +18,9 @@ F5 | websockets
 
 # Status
 
-Basilica is still *remarkably unfinished*.
+Basilica is *usable*. It is not a comprehensive, beautiful piece of software, but it works and the canonical instance of it has been live and somewhat-active for about two years.
 
-Small bits and pieces might happen to work here and there, but such behavior should be considered exceptional.
+Further development is not very likely, since it works well enough for my purposes.
 
 # API
 
@@ -242,7 +242,7 @@ When connected, Basilica will periodically send ping frames. If the client doesn
 
 Currently this is set to ping every 20 seconds and to disconnect clients if more than 40 seconds passes without receiving a pong. Don't rely on those values, though. Just pong the pings as quickly as you can. All websocket libraries should do this for you automatically.
 
-## Notes
+## Client Implementation Notes
 
 - When a new post is created, clients should update their cached `count` value for its parent. It's important that this value stays up-to-date for accurate paging.
 - When a disconnect occurs, and it will, reconnect the socket and then call `GET /posts?after=id`, where `id` is the latest post that you knew about. It's important that you reconnect the socket before filling the gap, otherwise any post created in the brief moment after the response and before the socket comes back will be lost.
@@ -257,15 +257,27 @@ Basilica uses SQLite. You need to create the database.
 
     $ sqlite3 basilica.db ".read schema.sql"
 
-And install the dependencies.
+Basilica is developed using [`stack`](http://haskellstack.org):
 
-    $ cabal install --only-dependencies -j
+    $ stack build
 
-Then modify the `conf` file. The `client-origin` field is optional, and mainly useful for development, so that you can serve your client from something like [Brunch](http://brunch.io/). When specified, it will set the `Access-Control-Allow-Origin` header and respond to `OPTIONS` requests appropriately.
+After that you can modify the `conf` file. Here's a list of all keys and their meanings:
 
-Then you basilican run it.
+    port = 3000
+    dbpath = "basilica.db"
+    client-origin = "http://localhost:3333"
+    client-url = "http://localhost:3333/client/"
+    mailgun-key = "asdf"
 
-    $ cabal run
+- `port` is the port that the HTTP and WS server will run on.
+- `dbpath` is the path to the SQLite file that you've initialized with the schema.
+- `client-origin` is optional. When specified, it will set the `Access-Control-Allow-Origin` header and respond to `OPTIONS` requests appropriately. This is especially useful for development when you might be serving the client from a different local port.
+- `client-url` is used in emails to generate one-click login links.
+- `mailgun-key` is the API key for the [Mailgun](https://www.mailgun.com) account you want to use to send emails. If omitted, codes will be written to stdout.
+
+Then you can run it.
+
+    $ stack exec basilica
 
 Now you're ready to *basilicate*.
 
