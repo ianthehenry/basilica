@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts #-}
-
 module Database.Internal
 ( module X
 , Database(..)
@@ -22,7 +20,6 @@ import Database.Persist
 import Database.Persist.Sql
 import Database.Sqlite (SqliteException(..), Error(..))
 import Types as X
-
 
 data Database = Database { dbPool :: ConnectionPool
                          , dbRNG :: MVar HashDRBG
