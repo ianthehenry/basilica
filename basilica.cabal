@@ -61,5 +61,7 @@ executable basilica
                     , NoImplicitPrelude
                     , NamedFieldPuns
                     , RecordWildCards
+                    , TypeFamilies
+                    , FlexibleContexts
 
   default-language: Haskell2010

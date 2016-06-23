@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 module Types (
   Post(..),
   PostQuery(..),
