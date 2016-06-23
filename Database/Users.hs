@@ -59,9 +59,8 @@ createCode email = do
       pure (Just (ResolvedCode code user))
   where
     newCode user = do
-      rng <- asks dbRNG
       now <- liftIO getCurrentTime
-      codeValue <- liftIO (secureRandom rng)
+      codeValue <- secureRandom
       let code = CodeRecord { codeValue = codeValue
                             , codeGeneratedAt = now
                             , codeValid = True
@@ -111,8 +110,7 @@ invalidateCode CodeRecord{codeValue} = do
 
 convertCodeToToken :: CodeRecord -> DatabaseM TokenRecord
 convertCodeToToken code = do
-  rng <- asks dbRNG
-  token <- liftIO (secureRandom rng)
+  token <- secureRandom
   runQuery (invalidateCode code *> insertToken token code)
 
 createToken :: Code -> DatabaseM (Maybe TokenRecord)
