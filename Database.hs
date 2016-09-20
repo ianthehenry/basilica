@@ -10,7 +10,7 @@ import Control.Monad.Logger (MonadLogger,)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Crypto.Random.DRBG
 import Database.Internal
-import Database.Persist.Sql (withSqlPool, SqlBackend)
+import Database.Persist.Sql (withSqlConn, SqlBackend)
 import Database.Persist.Sqlite (LogFunc, wrapConnection)
 import Database.Posts as X
 import Database.Sqlite (Connection, open, prepare, step)
@@ -30,7 +30,7 @@ withDatabase :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => Text -> (Da
 withDatabase dbPath f = do
   rng <- liftIO (newGenIO :: IO HashDRBG)
   rngSlot <- newMVar rng
-  withSqlPool (createSqliteBackend dbPath) 10 $ \pool ->
-    f Database { dbPool = pool
+  withSqlConn (createSqliteBackend dbPath) $ \conn ->
+    f Database { dbConn = conn
                , dbRNG = rngSlot
                }

@@ -21,7 +21,7 @@ import Database.Persist.Sql
 import Database.Sqlite (SqliteException(..), Error(..))
 import Types as X
 
-data Database = Database { dbPool :: ConnectionPool
+data Database = Database { dbConn :: SqlBackend
                          , dbRNG :: MVar HashDRBG
                          }
 
@@ -50,7 +50,7 @@ runInsert entity = (Just <$> runQuery (insert entity)) `catch` swallowConstraint
         swallowConstraintError e = throwM e
 
 runQuery :: (MonadIO m, MonadReader Database m, MonadBaseControl IO m) => SqlPersistT m a -> m a
-runQuery query = runSqlPool query =<< asks dbPool
+runQuery query = runSqlConn query =<< asks dbConn
 
 getOne :: (MonadIO m, MonadReader Database m, MonadBaseControl IO m) => (a -> b) -> SqlPersistT m [a] -> m (Maybe b)
 getOne f query = fmap f . listToMaybe <$> runQuery query
