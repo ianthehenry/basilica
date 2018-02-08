@@ -81,7 +81,7 @@ handleMessages :: IO () -> WS.Connection -> IO ()
 handleMessages onPong conn = void $ (runMaybeT . forever) $ do
   msg <- lift $ WS.receive conn
   case msg of
-    WS.DataMessage _     -> pure ()
+    WS.DataMessage _ _ _ _ -> pure ()
     WS.ControlMessage cm -> case cm of
       WS.Close _ _ -> mzero
       WS.Pong _    -> lift onPong
