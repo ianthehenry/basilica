@@ -9,7 +9,8 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable basilica
-  main-is:             Main.hs
+  main-is: Main.hs
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends: DRBG
                , aeson
                , base
