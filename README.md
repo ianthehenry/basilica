@@ -113,7 +113,7 @@ This is similar to the "forgot my password" flow found in most apps, except that
 
 - **requires a valid `token`**
 - for: creating a new post as a child of the specified `idParent`
-- `idParent` is optional. If ommitted, this will create a post with `idParent` set to `null`.
+- `idParent` is optional. If omitted, this will create a post with `idParent` set to `null`.
 - arguments: an `x-www-form-urlencoded` body is expected with
     - `content` (any string)
         - required
