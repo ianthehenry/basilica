@@ -18,7 +18,7 @@ F5 | websockets
 
 # Status
 
-Basilica is *usable*. It is not a comprehensive, beautiful piece of software, but it works and the canonical instance of it has been live and somewhat-active for about two years.
+Basilica is *usable*. It is not a comprehensive, beautiful piece of software, but it works and the canonical instance of it has been live and running since 2014.
 
 Further development is not very likely, since it works well enough for my purposes.
 
